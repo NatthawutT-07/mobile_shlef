@@ -53,3 +53,13 @@ export const cancelPogRequest = async (id) => {
     const res = await api.patch(`/pog-request/${id}/cancel`);
     return res.data;
 };
+
+/**
+ * ค้นหาสินค้าจาก Barcode (Master Lookup)
+ * @param {string} branchCode
+ * @param {string} barcode
+ */
+export const lookupProduct = async (branchCode, barcode) => {
+    const res = await api.get('/lookup', { params: { branchCode, barcode } });
+    return res.data;
+};

@@ -1,4 +1,16 @@
+/**
+ * CreatePogRequestScreen - Create POG Change Request
+ * Form for submitting product add/move/delete requests
+ */
+
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
+// React
 import React, { useState, useEffect, useMemo } from 'react';
+
+// React Native
 import {
     View,
     Text,
@@ -11,16 +23,31 @@ import {
     FlatList,
     Platform,
 } from 'react-native';
+
+// Local imports
 import useAuthStore from '../store/authStore';
 import { createPogRequest, getBranchShelves } from '../api/user';
+import { getErrorMessage } from '../utils/errorHelper';
+import { BRANCHES } from '../constants/branches';
 
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+
+/** Available action types for POG requests */
 const ACTION_OPTIONS = [
     { value: 'add', label: '➕ เพิ่มสินค้า', desc: 'เพิ่มสินค้านี้ไปยังตำแหน่งใหม่' },
     { value: 'move', label: '↔️ ย้ายตำแหน่ง', desc: 'ย้ายสินค้านี้ไปตำแหน่งอื่น' },
     { value: 'delete', label: '🗑️ ลบสินค้า', desc: 'ลบสินค้าออกจากตำแหน่งปัจจุบัน' },
 ];
 
-// Custom dropdown component (web compatible)
+// =============================================================================
+// SUB-COMPONENTS
+// =============================================================================
+
+/**
+ * CustomPicker - Web-compatible dropdown component
+ */
 function CustomPicker({ label, value, options, onChange, placeholder, disabled }) {
     const [isOpen, setIsOpen] = useState(false);
     const selectedOption = options.find((opt) => opt.value === value);
@@ -41,15 +68,15 @@ function CustomPicker({ label, value, options, onChange, placeholder, disabled }
 
             <Modal visible={isOpen} transparent animationType="fade">
                 <TouchableOpacity
-                    style={styles.modalOverlay}
+                    style={styles.pickerModalOverlay}
                     activeOpacity={1}
                     onPress={() => setIsOpen(false)}
                 >
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>{label}</Text>
+                    <View style={styles.pickerModalContent}>
+                        <View style={styles.pickerModalHeader}>
+                            <Text style={styles.pickerModalTitle}>{label}</Text>
                             <TouchableOpacity onPress={() => setIsOpen(false)}>
-                                <Text style={styles.modalClose}>✕</Text>
+                                <Text style={styles.pickerModalClose}>✕</Text>
                             </TouchableOpacity>
                         </View>
                         <FlatList
@@ -58,8 +85,8 @@ function CustomPicker({ label, value, options, onChange, placeholder, disabled }
                             renderItem={({ item }) => (
                                 <TouchableOpacity
                                     style={[
-                                        styles.optionItem,
-                                        value === item.value && styles.optionItemActive,
+                                        styles.pickerOptionItem,
+                                        value === item.value && styles.pickerOptionItemActive,
                                     ]}
                                     onPress={() => {
                                         onChange(item.value);
@@ -68,16 +95,16 @@ function CustomPicker({ label, value, options, onChange, placeholder, disabled }
                                 >
                                     <Text
                                         style={[
-                                            styles.optionText,
-                                            value === item.value && styles.optionTextActive,
+                                            styles.pickerOptionText,
+                                            value === item.value && styles.pickerOptionTextActive,
                                         ]}
                                     >
                                         {item.label}
                                     </Text>
-                                    {value === item.value && <Text style={styles.optionCheck}>✓</Text>}
+                                    {value === item.value && <Text style={styles.pickerOptionCheck}>✓</Text>}
                                 </TouchableOpacity>
                             )}
-                            style={styles.optionList}
+                            style={styles.pickerOptionList}
                         />
                     </View>
                 </TouchableOpacity>
@@ -86,54 +113,51 @@ function CustomPicker({ label, value, options, onChange, placeholder, disabled }
     );
 }
 
+// =============================================================================
+// MAIN COMPONENT
+// =============================================================================
+
 export default function CreatePogRequestScreen({ navigation, route }) {
+    // -------------------------------------------------------------------------
+    // State & Store
+    // -------------------------------------------------------------------------
     const user = useAuthStore((s) => s.user);
     const storecode = user?.storecode || user?.name;
 
-    // Get product info from route params (if coming from Planogram or Scanner)
-    const {
-        barcode: initialBarcode = '',
-        productName: initialProductName = '',
-        currentShelf = '',
-        currentRow = '',
-        currentIndex = '',
-        defaultAction = '',
-    } = route.params || {};
-
-    const [action, setAction] = useState(defaultAction);
-    const [barcode, setBarcode] = useState(initialBarcode);
-    const [productName, setProductName] = useState(initialProductName);
+    // Form state
+    const [action, setAction] = useState(route.params?.defaultAction || '');
+    const [barcode, setBarcode] = useState(route.params?.barcode || '');
+    const [productName, setProductName] = useState(route.params?.productName || '');
     const [toShelf, setToShelf] = useState('');
     const [toRow, setToRow] = useState('');
     const [toIndex, setToIndex] = useState('');
     const [note, setNote] = useState('');
 
+    // Data state
     const [shelves, setShelves] = useState([]);
     const [shelvesLoading, setShelvesLoading] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
 
-    // Load shelves
-    useEffect(() => {
-        if (!storecode) return;
+    // Route params
+    const {
+        barcode: initialBarcode = '',
+        currentShelf = '',
+        currentRow = '',
+        currentIndex = '',
+        productExists = false,
+    } = route.params || {};
 
-        const loadShelves = async () => {
-            setShelvesLoading(true);
-            try {
-                const result = await getBranchShelves(storecode);
-                setShelves(result?.shelves || []);
-            } catch (err) {
-                console.error('Load shelves error:', err);
-            } finally {
-                setShelvesLoading(false);
-            }
-        };
-
-        loadShelves();
+    // -------------------------------------------------------------------------
+    // Derived Values
+    // -------------------------------------------------------------------------
+    const branchName = useMemo(() => {
+        if (!storecode) return 'ผู้ใช้';
+        const branch = BRANCHES.find((b) => b.code === storecode);
+        return branch ? branch.label.replace(`${storecode} - `, '') : storecode;
     }, [storecode]);
 
-    // Calculate available rows for selected shelf
     const selectedShelfData = useMemo(() => {
         if (!toShelf) return null;
         return shelves.find((s) => s.shelfCode === toShelf);
@@ -157,25 +181,21 @@ export default function CreatePogRequestScreen({ navigation, route }) {
 
     const indexOptions = useMemo(() => {
         if (!selectedShelfData || !toRow) return [];
-
         const items = selectedShelfData.items || [];
         const rowNum = Number(toRow);
         const itemsInRow = items.filter((item) => Number(item.rowNo) === rowNum);
         const maxIndex = itemsInRow.length;
-
         return Array.from({ length: maxIndex + 1 }, (_, i) => ({
             value: String(i + 1),
             label: i + 1 === maxIndex + 1 ? `${i + 1} (ใหม่)` : String(i + 1),
         }));
     }, [selectedShelfData, toRow]);
 
-    // ✅ Check if barcode exists in any shelf
     const existingProduct = useMemo(() => {
         if (!barcode || !shelves.length) return null;
         const bc = String(barcode).trim();
         for (const shelf of shelves) {
-            const items = shelf.items || [];
-            for (const item of items) {
+            for (const item of shelf.items || []) {
                 if (String(item.barcode || '').trim() === bc) {
                     return {
                         shelfCode: shelf.shelfCode,
@@ -189,20 +209,43 @@ export default function CreatePogRequestScreen({ navigation, route }) {
         return null;
     }, [barcode, shelves]);
 
-    // Action availability based on product existence
     const productExistsInShelf = existingProduct !== null;
 
-    // Reset when shelf changes
+    // -------------------------------------------------------------------------
+    // Effects
+    // -------------------------------------------------------------------------
+    useEffect(() => {
+        if (!storecode) return;
+        const loadShelves = async () => {
+            setShelvesLoading(true);
+            try {
+                const result = await getBranchShelves(storecode);
+                setShelves(result?.shelves || []);
+            } catch (err) {
+                console.error('Load shelves error:', err);
+            } finally {
+                setShelvesLoading(false);
+            }
+        };
+        loadShelves();
+    }, [storecode]);
+
+    useEffect(() => {
+        if (error) setError('');
+    }, [action, toShelf, toRow, toIndex, barcode, productName, note]);
+
     useEffect(() => {
         setToRow('');
         setToIndex('');
     }, [toShelf]);
 
-    // Reset when row changes
     useEffect(() => {
         setToIndex('');
     }, [toRow]);
 
+    // -------------------------------------------------------------------------
+    // Event Handlers
+    // -------------------------------------------------------------------------
     const handleSubmit = async () => {
         if (loading) return;
 
@@ -210,12 +253,10 @@ export default function CreatePogRequestScreen({ navigation, route }) {
             setError('กรุณาเลือกประเภทการเปลี่ยนแปลง');
             return;
         }
-
         if (!barcode) {
             setError('กรุณาระบุบาร์โค้ด');
             return;
         }
-
         if ((action === 'add' || action === 'move') && (!toShelf || !toRow || !toIndex)) {
             setError('กรุณาระบุตำแหน่งให้ครบถ้วน');
             return;
@@ -238,38 +279,80 @@ export default function CreatePogRequestScreen({ navigation, route }) {
                 toIndex: action !== 'delete' ? Number(toIndex) : null,
                 note,
             });
-
             setSuccess(true);
         } catch (err) {
             console.error('Create POG request error:', err);
-            const msg = err?.response?.data?.message || 'เกิดข้อผิดพลาด';
-            setError(msg);
+            setError(getErrorMessage(err));
         } finally {
             setLoading(false);
         }
     };
 
-    // Success screen
-    if (success) {
-        return (
-            <View style={styles.container}>
-                <View style={styles.successContainer}>
-                    <Text style={styles.successIcon}>✅</Text>
-                    <Text style={styles.successTitle}>ส่งคำขอสำเร็จ!</Text>
-                    <Text style={styles.successText}>รอดำเนินการ</Text>
-                    <TouchableOpacity
-                        style={styles.successButton}
-                        onPress={() => navigation.goBack()}
-                    >
-                        <Text style={styles.successButtonText}>กลับ</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
-        );
-    }
+    const handleCloseSuccess = () => {
+        setSuccess(false);
+        navigation.goBack();
+    };
 
+    // -------------------------------------------------------------------------
+    // Render Helpers
+    // -------------------------------------------------------------------------
+    const renderActionOptions = () => (
+        <View style={styles.actionOptionsRow}>
+            {ACTION_OPTIONS.map((opt) => {
+                const isAddDisabled = opt.value === 'add' && (productExistsInShelf || productExists);
+                const isMoveDisabled = opt.value === 'move' && !productExistsInShelf && !productExists;
+                const isDeleteDisabled = opt.value === 'delete' && !productExistsInShelf && !productExists;
+                const isDisabled = isAddDisabled || isMoveDisabled || isDeleteDisabled;
+
+                return (
+                    <TouchableOpacity
+                        key={opt.value}
+                        style={[
+                            styles.actionOptionBlock,
+                            action === opt.value && styles.actionOptionBlockActive,
+                            isDisabled && styles.actionOptionBlockDisabled,
+                        ]}
+                        onPress={() => !isDisabled && setAction(opt.value)}
+                        disabled={isDisabled}
+                    >
+                        <Text
+                            style={[
+                                styles.actionBlockLabel,
+                                action === opt.value && styles.actionBlockLabelActive,
+                                isDisabled && styles.actionBlockLabelDisabled,
+                            ]}
+                        >
+                            {opt.label}
+                        </Text>
+                    </TouchableOpacity>
+                );
+            })}
+        </View>
+    );
+
+    // -------------------------------------------------------------------------
+    // Render
+    // -------------------------------------------------------------------------
     return (
         <View style={styles.container}>
+            {/* Success Modal */}
+            <Modal visible={success} transparent animationType="fade">
+                <TouchableOpacity
+                    style={styles.successOverlay}
+                    activeOpacity={1}
+                    onPress={handleCloseSuccess}
+                >
+                    <View style={styles.successPopup}>
+                        <Text style={styles.successPopupIcon}>✅</Text>
+                        <Text style={styles.successPopupTitle}>ส่งคำขอสำเร็จ!</Text>
+                        <Text style={styles.successPopupText}>รอดำเนินการ</Text>
+                        <TouchableOpacity style={styles.successPopupButton} onPress={handleCloseSuccess}>
+                            <Text style={styles.successPopupButtonText}>ตกลง</Text>
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
@@ -277,12 +360,12 @@ export default function CreatePogRequestScreen({ navigation, route }) {
                 </TouchableOpacity>
                 <View style={styles.headerInfo}>
                     <Text style={styles.title}>แจ้งขอเปลี่ยนแปลง</Text>
-                    <Text style={styles.subtitle}>สาขา: {storecode}</Text>
+                    <Text style={styles.subtitle}>สาขา: {branchName}</Text>
                 </View>
             </View>
 
             <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-                {/* Product Info */}
+                {/* Product Info Section */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>ข้อมูลสินค้า</Text>
 
@@ -293,36 +376,22 @@ export default function CreatePogRequestScreen({ navigation, route }) {
                                 <Text style={styles.readOnlyText}>{barcode}</Text>
                             </View>
                         ) : (
-                            <View style={styles.inputWithButton}>
-                                <TextInput
-                                    style={styles.inputFlex}
-                                    value={barcode}
-                                    onChangeText={setBarcode}
-                                    placeholder="กรอกบาร์โค้ด"
-                                    placeholderTextColor="#94a3b8"
-                                    keyboardType="numeric"
-                                />
-                                <TouchableOpacity
-                                    style={[styles.searchBarButton, !barcode && styles.searchBarButtonDisabled]}
-                                    onPress={() => {/* trigger lookup - already auto via existingProduct */ }}
-                                    disabled={!barcode}
-                                >
-                                    <Text style={styles.searchBarButtonText}>🔍</Text>
-                                </TouchableOpacity>
-                            </View>
+                            <TextInput
+                                style={styles.input}
+                                value={barcode}
+                                onChangeText={setBarcode}
+                                placeholder="กรอกบาร์โค้ด"
+                                placeholderTextColor="#94a3b8"
+                                keyboardType="numeric"
+                            />
                         )}
-                        {/* Show lookup result */}
                         {!initialBarcode && barcode && !shelvesLoading && (
                             <View style={[styles.lookupResult, productExistsInShelf ? styles.lookupResultFound : styles.lookupResultNotFound]}>
-                                {productExistsInShelf ? (
-                                    <Text style={styles.lookupResultFoundText}>
-                                        ✓ พบในสาขา: {existingProduct?.shelfCode} / ชั้น {existingProduct?.rowNo} / ลำดับ {existingProduct?.index}
-                                    </Text>
-                                ) : (
-                                    <Text style={styles.lookupResultNotFoundText}>
-                                        ✗ ไม่พบสินค้านี้ใน Planogram
-                                    </Text>
-                                )}
+                                <Text style={productExistsInShelf ? styles.lookupResultFoundText : styles.lookupResultNotFoundText}>
+                                    {productExistsInShelf
+                                        ? `✓ พบในสาขา: ${existingProduct?.shelfCode} / ชั้น ${existingProduct?.rowNo} / ลำดับ ${existingProduct?.index}`
+                                        : '✗ ไม่พบสินค้านี้ใน Planogram'}
+                                </Text>
                             </View>
                         )}
                     </View>
@@ -354,11 +423,9 @@ export default function CreatePogRequestScreen({ navigation, route }) {
                     )}
                 </View>
 
-                {/* Action Selection */}
+                {/* Action Selection Section */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>เลือกประเภทการเปลี่ยนแปลง</Text>
-
-                    {/* Show existing location info if found */}
                     {productExistsInShelf && existingProduct && (
                         <View style={styles.existingLocationBox}>
                             <Text style={styles.existingLocationText}>
@@ -366,46 +433,10 @@ export default function CreatePogRequestScreen({ navigation, route }) {
                             </Text>
                         </View>
                     )}
-
-                    {ACTION_OPTIONS.map((opt) => {
-                        // Disable logic: same as web-BMR
-                        const isAddDisabled = opt.value === 'add' && productExistsInShelf;
-                        const isMoveDisabled = opt.value === 'move' && !productExistsInShelf;
-                        const isDeleteDisabled = opt.value === 'delete' && !productExistsInShelf;
-                        const isDisabled = isAddDisabled || isMoveDisabled || isDeleteDisabled;
-
-                        return (
-                            <TouchableOpacity
-                                key={opt.value}
-                                style={[
-                                    styles.actionOption,
-                                    action === opt.value && styles.actionOptionActive,
-                                    isDisabled && styles.actionOptionDisabled,
-                                ]}
-                                onPress={() => !isDisabled && setAction(opt.value)}
-                                disabled={isDisabled}
-                            >
-                                <Text
-                                    style={[
-                                        styles.actionLabel,
-                                        action === opt.value && styles.actionLabelActive,
-                                        isDisabled && styles.actionLabelDisabled,
-                                    ]}
-                                >
-                                    {opt.label}
-                                </Text>
-                                <Text style={[styles.actionDesc, isDisabled && styles.actionDescDisabled]}>
-                                    {isAddDisabled && 'สินค้านี้มีใน shelf แล้ว'}
-                                    {isMoveDisabled && 'สินค้านี้ยังไม่มีใน shelf'}
-                                    {isDeleteDisabled && 'สินค้านี้ยังไม่มีใน shelf'}
-                                    {!isDisabled && opt.desc}
-                                </Text>
-                            </TouchableOpacity>
-                        );
-                    })}
+                    {renderActionOptions()}
                 </View>
 
-                {/* Target Position (for add/move) */}
+                {/* Target Position Section */}
                 {(action === 'add' || action === 'move') && (
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>
@@ -426,7 +457,6 @@ export default function CreatePogRequestScreen({ navigation, route }) {
                                     onChange={setToShelf}
                                     placeholder="-- เลือกชั้นวาง --"
                                 />
-
                                 <CustomPicker
                                     label="ชั้นที่ (Row)"
                                     value={toRow}
@@ -435,7 +465,6 @@ export default function CreatePogRequestScreen({ navigation, route }) {
                                     placeholder="-- เลือกชั้น --"
                                     disabled={rowOptions.length === 0}
                                 />
-
                                 <CustomPicker
                                     label="ลำดับ (Index)"
                                     value={toIndex}
@@ -444,8 +473,6 @@ export default function CreatePogRequestScreen({ navigation, route }) {
                                     placeholder="-- เลือกลำดับ --"
                                     disabled={indexOptions.length === 0}
                                 />
-
-                                {/* Selected Position Info */}
                                 {toShelf && toRow && toIndex && (
                                     <View style={styles.positionInfoBox}>
                                         <Text style={styles.positionInfoText}>
@@ -458,7 +485,7 @@ export default function CreatePogRequestScreen({ navigation, route }) {
                     </View>
                 )}
 
-                {/* Note */}
+                {/* Note Section */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>หมายเหตุ (ถ้ามี)</Text>
                     <TextInput
@@ -472,7 +499,7 @@ export default function CreatePogRequestScreen({ navigation, route }) {
                     />
                 </View>
 
-                {/* Error */}
+                {/* Error Display */}
                 {error ? (
                     <View style={styles.errorBox}>
                         <Text style={styles.errorText}>⚠️ {error}</Text>
@@ -496,13 +523,26 @@ export default function CreatePogRequestScreen({ navigation, route }) {
     );
 }
 
+// =============================================================================
+// STYLES
+// =============================================================================
+
 const styles = StyleSheet.create({
+    // Layout
     container: {
         flex: 1,
         backgroundColor: '#f0fdf4',
         paddingTop: 24,
         paddingBottom: 16,
     },
+    content: {
+        flex: 1,
+    },
+    contentContainer: {
+        padding: 16,
+    },
+
+    // Header
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -532,24 +572,16 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#64748b',
     },
-    content: {
-        flex: 1,
-    },
-    contentContainer: {
-        padding: 16,
-    },
+
+    // Sections
     section: {
         backgroundColor: '#fff',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 16,
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 10,
         ...Platform.select({
-            web: {
-                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
-            },
-            default: {
-                elevation: 2,
-            },
+            web: { boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)' },
+            default: { elevation: 2 },
         }),
     },
     sectionTitle: {
@@ -558,8 +590,10 @@ const styles = StyleSheet.create({
         color: '#374151',
         marginBottom: 12,
     },
+
+    // Form Elements
     inputGroup: {
-        marginBottom: 12,
+        marginBottom: 8,
     },
     label: {
         fontSize: 13,
@@ -570,42 +604,31 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8fafc',
         borderWidth: 1,
         borderColor: '#e2e8f0',
-        borderRadius: 10,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-        fontSize: 15,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        fontSize: 14,
         color: '#1e293b',
     },
-    inputWithButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
+    textArea: {
+        minHeight: 80,
+        textAlignVertical: 'top',
     },
-    inputFlex: {
-        flex: 1,
-        backgroundColor: '#f8fafc',
+    readOnlyBox: {
+        backgroundColor: '#e2e8f0',
         borderWidth: 1,
-        borderColor: '#e2e8f0',
+        borderColor: '#cbd5e1',
         borderRadius: 10,
         paddingHorizontal: 14,
         paddingVertical: 12,
+    },
+    readOnlyText: {
         fontSize: 15,
-        color: '#1e293b',
+        color: '#475569',
+        fontWeight: '500',
     },
-    searchBarButton: {
-        width: 44,
-        height: 44,
-        backgroundColor: '#10b981',
-        borderRadius: 10,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginLeft: 8,
-    },
-    searchBarButtonDisabled: {
-        opacity: 0.4,
-    },
-    searchBarButtonText: {
-        fontSize: 18,
-    },
+
+    // Lookup Result
     lookupResult: {
         marginTop: 8,
         padding: 10,
@@ -627,11 +650,86 @@ const styles = StyleSheet.create({
         color: '#dc2626',
         fontWeight: '500',
     },
-    textArea: {
-        minHeight: 80,
-        textAlignVertical: 'top',
+
+    // Position Boxes
+    currentPositionBox: {
+        backgroundColor: '#f0f9ff',
+        padding: 12,
+        borderRadius: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
     },
-    // Custom Picker styles
+    currentPositionLabel: {
+        fontSize: 13,
+        color: '#64748b',
+    },
+    currentPositionText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#0369a1',
+        marginLeft: 8,
+    },
+    existingLocationBox: {
+        backgroundColor: '#dbeafe',
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 12,
+    },
+    existingLocationText: {
+        fontSize: 13,
+        color: '#1e40af',
+        fontWeight: '500',
+    },
+    positionInfoBox: {
+        backgroundColor: '#dbeafe',
+        padding: 12,
+        borderRadius: 8,
+        marginTop: 8,
+    },
+    positionInfoText: {
+        fontSize: 13,
+        color: '#1e40af',
+        fontWeight: '500',
+    },
+
+    // Action Options
+    actionOptionsRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        gap: 8,
+    },
+    actionOptionBlock: {
+        flex: 1,
+        borderWidth: 2,
+        borderColor: '#e2e8f0',
+        borderRadius: 8,
+        paddingVertical: 12,
+        paddingHorizontal: 8,
+        alignItems: 'center',
+        backgroundColor: '#f8fafc',
+    },
+    actionOptionBlockActive: {
+        borderColor: '#10b981',
+        backgroundColor: '#ecfdf5',
+    },
+    actionOptionBlockDisabled: {
+        opacity: 0.4,
+        backgroundColor: '#f1f5f9',
+    },
+    actionBlockLabel: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#374151',
+        textAlign: 'center',
+    },
+    actionBlockLabelActive: {
+        color: '#059669',
+    },
+    actionBlockLabelDisabled: {
+        color: '#9ca3af',
+    },
+
+    // Custom Picker
     pickerWrapper: {
         marginBottom: 12,
     },
@@ -660,21 +758,23 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#94a3b8',
     },
-    modalOverlay: {
+
+    // Picker Modal
+    pickerModalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20,
     },
-    modalContent: {
+    pickerModalContent: {
         backgroundColor: '#fff',
         borderRadius: 16,
         width: '100%',
         maxWidth: 400,
         maxHeight: '70%',
     },
-    modalHeader: {
+    pickerModalHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -682,20 +782,20 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#e5e7eb',
     },
-    modalTitle: {
+    pickerModalTitle: {
         fontSize: 16,
         fontWeight: '600',
         color: '#1e293b',
     },
-    modalClose: {
+    pickerModalClose: {
         fontSize: 18,
         color: '#64748b',
         padding: 4,
     },
-    optionList: {
+    pickerOptionList: {
         maxHeight: 300,
     },
-    optionItem: {
+    pickerOptionItem: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -704,96 +804,23 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#f1f5f9',
     },
-    optionItemActive: {
+    pickerOptionItemActive: {
         backgroundColor: '#ecfdf5',
     },
-    optionText: {
+    pickerOptionText: {
         fontSize: 15,
         color: '#374151',
     },
-    optionTextActive: {
+    pickerOptionTextActive: {
         color: '#059669',
         fontWeight: '500',
     },
-    optionCheck: {
+    pickerOptionCheck: {
         fontSize: 16,
         color: '#10b981',
     },
-    currentPositionBox: {
-        backgroundColor: '#f0f9ff',
-        padding: 12,
-        borderRadius: 8,
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    currentPositionLabel: {
-        fontSize: 13,
-        color: '#64748b',
-    },
-    currentPositionText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: '#0369a1',
-        marginLeft: 8,
-    },
-    readOnlyBox: {
-        backgroundColor: '#e2e8f0',
-        borderWidth: 1,
-        borderColor: '#cbd5e1',
-        borderRadius: 10,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-    },
-    readOnlyText: {
-        fontSize: 15,
-        color: '#475569',
-        fontWeight: '500',
-    },
-    existingLocationBox: {
-        backgroundColor: '#dbeafe',
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 12,
-    },
-    existingLocationText: {
-        fontSize: 13,
-        color: '#1e40af',
-        fontWeight: '500',
-    },
-    actionOption: {
-        borderWidth: 2,
-        borderColor: '#e2e8f0',
-        borderRadius: 10,
-        padding: 14,
-        marginBottom: 10,
-    },
-    actionOptionActive: {
-        borderColor: '#f59e0b',
-        backgroundColor: '#fffbeb',
-    },
-    actionLabel: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#374151',
-    },
-    actionLabelActive: {
-        color: '#b45309',
-    },
-    actionDesc: {
-        fontSize: 12,
-        color: '#64748b',
-        marginTop: 4,
-    },
-    actionOptionDisabled: {
-        opacity: 0.5,
-        backgroundColor: '#f8fafc',
-    },
-    actionLabelDisabled: {
-        color: '#94a3b8',
-    },
-    actionDescDisabled: {
-        color: '#94a3b8',
-    },
+
+    // Loading
     loadingBox: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -806,17 +833,8 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#64748b',
     },
-    positionInfoBox: {
-        backgroundColor: '#dbeafe',
-        padding: 12,
-        borderRadius: 8,
-        marginTop: 8,
-    },
-    positionInfoText: {
-        fontSize: 13,
-        color: '#1e40af',
-        fontWeight: '500',
-    },
+
+    // Error
     errorBox: {
         backgroundColor: '#fef2f2',
         padding: 14,
@@ -827,6 +845,8 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#dc2626',
     },
+
+    // Submit Button
     submitButton: {
         backgroundColor: '#f59e0b',
         borderRadius: 12,
@@ -842,35 +862,48 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#fff',
     },
-    successContainer: {
+
+    // Success Modal
+    successOverlay: {
         flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 20,
     },
-    successIcon: {
-        fontSize: 60,
+    successPopup: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 24,
+        alignItems: 'center',
+        minWidth: 250,
+        ...Platform.select({
+            web: { boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' },
+            default: { elevation: 8 },
+        }),
+    },
+    successPopupIcon: {
+        fontSize: 48,
+        marginBottom: 12,
+    },
+    successPopupTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#10b981',
+        marginBottom: 4,
+    },
+    successPopupText: {
+        fontSize: 14,
+        color: '#64748b',
         marginBottom: 16,
     },
-    successTitle: {
-        fontSize: 22,
-        fontWeight: '600',
-        color: '#059669',
-        marginBottom: 8,
-    },
-    successText: {
-        fontSize: 15,
-        color: '#64748b',
-        marginBottom: 24,
-    },
-    successButton: {
+    successPopupButton: {
         backgroundColor: '#10b981',
         paddingHorizontal: 32,
-        paddingVertical: 14,
-        borderRadius: 10,
+        paddingVertical: 10,
+        borderRadius: 8,
     },
-    successButtonText: {
-        fontSize: 16,
+    successPopupButtonText: {
+        fontSize: 14,
         fontWeight: '600',
         color: '#fff',
     },

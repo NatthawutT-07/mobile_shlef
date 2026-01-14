@@ -1,22 +1,52 @@
-import React, { useMemo } from 'react';
+/**
+ * HomeScreen - Main menu screen for BMR Planogram app
+ * Displays main navigation options and user info
+ */
+
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
+// React
+import React, { useMemo, useState } from 'react';
+
+// React Native
 import {
     View,
     Text,
     TouchableOpacity,
     StyleSheet,
     SafeAreaView,
-    Alert,
     ScrollView,
     Platform,
+    Modal,
 } from 'react-native';
+
+// Local imports
 import useAuthStore from '../store/authStore';
 import { BRANCHES } from '../constants/branches';
 
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+
+const APP_VERSION = '1.0.1';
+
+// =============================================================================
+// MAIN COMPONENT
+// =============================================================================
+
 export default function HomeScreen({ navigation }) {
+    // -------------------------------------------------------------------------
+    // State & Store
+    // -------------------------------------------------------------------------
     const user = useAuthStore((s) => s.user);
     const logout = useAuthStore((s) => s.logout);
+    const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-    // Get branch full name from code
+    // -------------------------------------------------------------------------
+    // Derived Values
+    // -------------------------------------------------------------------------
     const branchName = useMemo(() => {
         const code = user?.storecode || user?.name;
         if (!code) return 'ผู้ใช้';
@@ -24,35 +54,16 @@ export default function HomeScreen({ navigation }) {
         return branch ? branch.label.replace(`${code} - `, '') : code;
     }, [user]);
 
-    const handleLogout = () => {
-        // Alert.alert ไม่ทำงานบน web ใช้ confirm แทน
-        if (Platform.OS === 'web') {
-            if (window.confirm('คุณต้องการออกจากระบบหรือไม่?')) {
-                logout();
-            }
-        } else {
-            Alert.alert(
-                'ออกจากระบบ',
-                'คุณต้องการออกจากระบบหรือไม่?',
-                [
-                    { text: 'ยกเลิก', style: 'cancel' },
-                    {
-                        text: 'ออกจากระบบ',
-                        style: 'destructive',
-                        onPress: () => logout(),
-                    },
-                ]
-            );
-        }
-    };
-
+    // -------------------------------------------------------------------------
+    // Menu Configuration
+    // -------------------------------------------------------------------------
     const menuItems = [
         {
             id: 'scanner',
             icon: '📷',
             title: 'สแกนบาร์โค้ด',
             subtitle: 'ค้นหาสินค้าด้วยกล้อง',
-            onPress: () => navigation.navigate('BarcodeScanner'),
+            screen: 'BarcodeScanner',
             enabled: true,
         },
         {
@@ -60,16 +71,15 @@ export default function HomeScreen({ navigation }) {
             icon: '📋',
             title: 'ดู Planogram',
             subtitle: 'ดูโครงสร้างชั้นวางสินค้า',
-            onPress: () => navigation.navigate('Planogram'),
+            screen: 'Planogram',
             enabled: true,
         },
-
         {
             id: 'requests',
             icon: '📦',
             title: 'ประวัติคำขอ',
             subtitle: 'ดูและจัดการคำขอเปลี่ยนแปลง',
-            onPress: () => navigation.navigate('PogRequests'),
+            screen: 'PogRequests',
             enabled: true,
         },
         {
@@ -77,19 +87,38 @@ export default function HomeScreen({ navigation }) {
             icon: '📊',
             title: 'รายงาน',
             subtitle: 'เร็วๆ นี้',
-            onPress: () => { },
+            screen: null,
             enabled: false,
         },
     ];
 
+    // -------------------------------------------------------------------------
+    // Event Handlers
+    // -------------------------------------------------------------------------
+    const handleMenuPress = (item) => {
+        if (item.screen) {
+            navigation.navigate(item.screen);
+        }
+    };
+
+    const handleLogout = () => {
+        setShowLogoutModal(true);
+    };
+
+    const confirmLogout = () => {
+        setShowLogoutModal(false);
+        logout();
+    };
+
+    // -------------------------------------------------------------------------
+    // Render
+    // -------------------------------------------------------------------------
     return (
         <SafeAreaView style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
                 <View>
-                    <Text style={styles.storeName}>
-                        สาขา {branchName}
-                    </Text>
+                    <Text style={styles.storeName}>สาขา {branchName}</Text>
                 </View>
                 <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
                     <Text style={styles.logoutButtonText}>ออก</Text>
@@ -98,7 +127,6 @@ export default function HomeScreen({ navigation }) {
 
             {/* Main Content */}
             <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-                {/* Menu */}
                 <View style={styles.menuSection}>
                     <Text style={styles.menuTitle}>เมนูหลัก</Text>
 
@@ -106,7 +134,7 @@ export default function HomeScreen({ navigation }) {
                         <TouchableOpacity
                             key={item.id}
                             style={[styles.menuItem, !item.enabled && styles.menuItemDisabled]}
-                            onPress={item.onPress}
+                            onPress={() => handleMenuPress(item)}
                             disabled={!item.enabled}
                             activeOpacity={0.7}
                         >
@@ -132,19 +160,58 @@ export default function HomeScreen({ navigation }) {
 
             {/* Footer */}
             <View style={styles.footer}>
-                <Text style={styles.footerText}>BMR Planogram v1.0</Text>
+                <Text style={styles.footerText}>BMR Planogram v{APP_VERSION}</Text>
             </View>
+
+            {/* Logout Confirmation Modal */}
+            <Modal visible={showLogoutModal} transparent animationType="fade">
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContainer}>
+                        <Text style={styles.modalTitle}>ยืนยันออกจากระบบ</Text>
+                        <Text style={styles.modalMessage}>คุณต้องการออกจากระบบใช่หรือไม่?</Text>
+
+                        <View style={styles.modalButtons}>
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.modalButtonCancel]}
+                                onPress={() => setShowLogoutModal(false)}
+                            >
+                                <Text style={styles.modalButtonTextCancel}>อยู่ต่อ</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.modalButtonConfirm]}
+                                onPress={confirmLogout}
+                            >
+                                <Text style={styles.modalButtonTextConfirm}>ออกเลย</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
 
+// =============================================================================
+// STYLES
+// =============================================================================
+
 const styles = StyleSheet.create({
+    // Layout
     container: {
         flex: 1,
         backgroundColor: '#f0fdf4',
         paddingTop: 24,
         paddingBottom: 16,
     },
+    content: {
+        flex: 1,
+    },
+    contentContainer: {
+        padding: 20,
+    },
+
+    // Header
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -154,10 +221,6 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
         borderBottomWidth: 1,
         borderBottomColor: '#e5e7eb',
-    },
-    greeting: {
-        fontSize: 14,
-        color: '#6b7280',
     },
     storeName: {
         fontSize: 18,
@@ -175,33 +238,8 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         color: '#dc2626',
     },
-    content: {
-        flex: 1,
-    },
-    contentContainer: {
-        padding: 20,
-    },
-    welcomeCard: {
-        backgroundColor: '#10b981',
-        borderRadius: 16,
-        padding: 24,
-        alignItems: 'center',
-        marginBottom: 24,
-    },
-    welcomeIcon: {
-        fontSize: 40,
-        marginBottom: 8,
-    },
-    welcomeTitle: {
-        fontSize: 20,
-        fontWeight: '600',
-        color: '#fff',
-        marginBottom: 4,
-    },
-    welcomeText: {
-        fontSize: 14,
-        color: '#d1fae5',
-    },
+
+    // Menu Section
     menuSection: {
         gap: 12,
     },
@@ -219,9 +257,7 @@ const styles = StyleSheet.create({
         padding: 16,
         marginBottom: 10,
         ...Platform.select({
-            web: {
-                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
-            },
+            web: { boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)' },
             default: {
                 shadowColor: '#000',
                 shadowOffset: { width: 0, height: 1 },
@@ -267,6 +303,8 @@ const styles = StyleSheet.create({
         color: '#9ca3af',
         marginLeft: 8,
     },
+
+    // Footer
     footer: {
         padding: 16,
         paddingBottom: 32,
@@ -275,5 +313,63 @@ const styles = StyleSheet.create({
     footerText: {
         fontSize: 12,
         color: '#9ca3af',
+    },
+
+    // Modal
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    modalContainer: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 24,
+        width: '100%',
+        maxWidth: 320,
+        alignItems: 'center',
+        ...Platform.select({
+            web: { boxShadow: '0 4px 16px rgba(0,0,0,0.2)' },
+            default: { elevation: 8 },
+        }),
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#1e293b',
+        marginBottom: 8,
+    },
+    modalMessage: {
+        fontSize: 14,
+        color: '#64748b',
+        textAlign: 'center',
+        marginBottom: 24,
+    },
+    modalButtons: {
+        flexDirection: 'row',
+        gap: 12,
+        width: '100%',
+    },
+    modalButton: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    modalButtonCancel: {
+        backgroundColor: '#f1f5f9',
+    },
+    modalButtonConfirm: {
+        backgroundColor: '#fee2e2',
+    },
+    modalButtonTextCancel: {
+        fontWeight: '600',
+        color: '#64748b',
+    },
+    modalButtonTextConfirm: {
+        fontWeight: '600',
+        color: '#dc2626',
     },
 });

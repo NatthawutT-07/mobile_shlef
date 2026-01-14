@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { BRANCHES } from '../constants/branches';
 import useAuthStore from '../store/authStore';
+import { getErrorMessage } from '../utils/errorHelper';
 
 export default function BranchSelectScreen({ navigation }) {
     const actionLogin = useAuthStore((s) => s.actionLogin);
@@ -43,14 +44,9 @@ export default function BranchSelectScreen({ navigation }) {
             });
             // Navigation will happen automatically via AppNavigator
         } catch (err) {
-            const payload = err?.response?.data;
-            let errMsg =
-                payload?.message ||
-                payload?.msg ||
-                (typeof payload === 'string' ? payload : '') ||
-                err?.message ||
-                'เข้าสู่ระบบไม่สำเร็จ';
+            let errMsg = getErrorMessage(err, 'เข้าสู่ระบบไม่สำเร็จ');
 
+            // Translate common login errors to Thai
             const lowered = String(errMsg).toLowerCase();
             if (lowered.includes('user not found') || lowered.includes('not enabled')) {
                 errMsg = 'ไม่พบผู้ใช้หรือยังไม่เปิดใช้งาน';

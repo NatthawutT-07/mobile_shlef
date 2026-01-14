@@ -10,9 +10,11 @@ import {
     SafeAreaView,
     RefreshControl,
     Platform,
+    Alert,
 } from 'react-native';
 import useAuthStore from '../store/authStore';
 import { getTemplateAndProduct } from '../api/user';
+import { getErrorMessage } from '../utils/errorHelper';
 
 // Group products by shelf
 const groupByShelf = (items) => {
@@ -74,6 +76,12 @@ export default function PlanogramScreen({ navigation }) {
             // Check if auth expired
             if (!checkAuthExpired()) {
                 setData([]);
+                const msg = getErrorMessage(err, 'ไม่สามารถโหลดข้อมูล Planogram ได้');
+                if (Platform.OS === 'web') {
+                    window.alert(msg);
+                } else {
+                    Alert.alert('ผิดพลาด', msg);
+                }
             }
         } finally {
             setLoading(false);
@@ -113,6 +121,7 @@ export default function PlanogramScreen({ navigation }) {
             currentShelf: product.shelfCode,
             currentRow: product.rowNo,
             currentIndex: product.index,
+            productExists: true, // Product already exists, only show move/delete
         });
     };
 
@@ -209,7 +218,7 @@ export default function PlanogramScreen({ navigation }) {
                 <View style={styles.headerInfo}>
                     <Text style={styles.title}>Planogram</Text>
                     <Text style={styles.subtitle}>
-                        {storecode} {branchName ? `- ${branchName}` : ''}
+                        {branchName || storecode}
                     </Text>
                 </View>
             </View>
@@ -473,17 +482,16 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
     editButton: {
-        width: 32,
-        height: 32,
-        borderRadius: 6,
-        backgroundColor: '#fef3c7',
+        width: 24,
+        height: 24,
+        borderRadius: 4,
+        backgroundColor: '#f1f5f9',
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#fcd34d',
+        opacity: 0.6,
     },
     editButtonText: {
-        fontSize: 14,
+        fontSize: 10,
     },
     noProductsText: {
         textAlign: 'center',

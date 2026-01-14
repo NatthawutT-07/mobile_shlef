@@ -2,7 +2,7 @@
   "expo": {
     "name": "Planogram",
     "slug": "mobile-bmr",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -33,6 +33,14 @@
     "plugins": [
       "expo-camera"
     ],
+    "updates": {
+      "enabled": true,
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/40aeef43-1033-4b2d-af2c-9f528390bdf9"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "extra": {
       "eas": {
         "projectId": "40aeef43-1033-4b2d-af2c-9f528390bdf9"

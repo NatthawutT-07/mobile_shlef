@@ -1,4 +1,16 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * BarcodeScannerScreen - Barcode scanning and product lookup
+ * Uses device camera to scan barcodes and lookup products in planogram
+ */
+
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
+// React
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+
+// React Native
 import {
     View,
     Text,
@@ -8,13 +20,42 @@ import {
     ActivityIndicator,
     Platform,
     TextInput,
-    Alert,
 } from 'react-native';
+
+// Third-party
 import { CameraView, useCameraPermissions } from 'expo-camera';
+
+// Local imports
 import useAuthStore from '../store/authStore';
-import api from '../api/axios';
+import { BRANCHES } from '../constants/branches';
+import { lookupProduct } from '../api/user';
+import { getErrorMessage } from '../utils/errorHelper';
+
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+
+/** Supported barcode types for scanning */
+const BARCODE_TYPES = [
+    'ean13', 'ean8', 'upc_a', 'upc_e',
+    'code128', 'code39', 'code93',
+    'itf14', 'codabar', 'qr'
+];
+
+/** Throttle delay for barcode scanning (ms) */
+const SCAN_THROTTLE_MS = 500;
+
+/** Cooldown after successful scan before allowing new scan (ms) */
+const SCAN_COOLDOWN_MS = 2000;
+
+// =============================================================================
+// MAIN COMPONENT
+// =============================================================================
 
 export default function BarcodeScannerScreen({ navigation }) {
+    // -------------------------------------------------------------------------
+    // State & Store
+    // -------------------------------------------------------------------------
     const user = useAuthStore((s) => s.user);
     const storecode = user?.storecode || user?.name;
 
@@ -26,18 +67,40 @@ export default function BarcodeScannerScreen({ navigation }) {
     const [manualBarcode, setManualBarcode] = useState('');
     const [showManualInput, setShowManualInput] = useState(false);
 
-    // Determine hasPermission from the hook
+    // Refs for throttling
+    const lastScanTime = useRef(0);
+    const lastBarcode = useRef('');
+    const isProcessing = useRef(false);
+
+    // -------------------------------------------------------------------------
+    // Derived Values
+    // -------------------------------------------------------------------------
+    const branchName = useMemo(() => {
+        if (!storecode) return 'ผู้ใช้';
+        const branch = BRANCHES.find((b) => b.code === storecode);
+        return branch ? branch.label.replace(`${storecode} - `, '') : storecode;
+    }, [storecode]);
+
     const hasPermission = Platform.OS === 'web' ? true : permission?.granted;
     const permissionLoading = Platform.OS === 'web' ? false : !permission;
 
-    // Request permission on mount for native
+    // -------------------------------------------------------------------------
+    // Effects
+    // -------------------------------------------------------------------------
     useEffect(() => {
         if (Platform.OS !== 'web' && !permission) {
             requestPermission();
         }
     }, [permission, requestPermission]);
 
-    // Lookup barcode in planogram
+    // -------------------------------------------------------------------------
+    // API Functions
+    // -------------------------------------------------------------------------
+
+    /**
+     * Lookup barcode in planogram and master product database
+     * @param {string} barcode - Barcode to lookup
+     */
     const lookupBarcode = async (barcode) => {
         if (!barcode || !storecode) return;
 
@@ -46,87 +109,105 @@ export default function BarcodeScannerScreen({ navigation }) {
         setResult(null);
 
         try {
-            // Get planogram data and find the barcode
-            const res = await api.post('/template-item', { branchCode: storecode });
-            const items = res.data?.items || [];
+            const data = await lookupProduct(storecode, barcode);
 
-            const found = items.find(
-                (item) => String(item.barcode) === String(barcode).trim()
-            );
-
-            if (found) {
+            if (data.found) {
+                const loc = data.locations?.[0] || {};
                 setResult({
                     found: true,
-                    barcode: found.barcode,
-                    productName: found.nameProduct || found.nameBrand,
-                    shelfCode: found.shelfCode,
-                    rowNo: found.rowNo,
-                    index: found.index,
-                    price: found.salesPriceIncVAT,
-                    stock: found.stockQuantity,
-                    minStore: found.minStore,
-                    maxStore: found.maxStore,
+                    barcode: data.product.barcode,
+                    productName: data.product.name,
+                    shelfCode: loc.shelfCode,
+                    rowNo: loc.rowNo,
+                    index: loc.index,
+                    price: data.product.price,
+                });
+            } else if (data.reason === 'NO_LOCATION_IN_POG') {
+                setResult({
+                    found: false,
+                    barcode: data.product.barcode,
+                    productName: data.product.name,
+                    reason: 'สินค้านี้ยังไม่มีใน Planogram (แต่มีในระบบ)',
+                    isMasterFound: true
                 });
             } else {
                 setResult({
                     found: false,
                     barcode: barcode,
-                    reason: 'ไม่พบสินค้านี้ใน Planogram ของสาขา',
+                    reason: 'ไม่พบสินค้านี้ในระบบ',
                 });
             }
         } catch (err) {
             console.error('Lookup error:', err);
-            setError('เกิดข้อผิดพลาดในการค้นหา');
+            setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการค้นหา'));
         } finally {
             setLoading(false);
         }
     };
 
-    // Handle barcode scanned
-    const handleBarCodeScanned = ({ type, data }) => {
-        if (scanned || loading) return;
-        setScanned(true);
-        lookupBarcode(data);
-    };
+    // -------------------------------------------------------------------------
+    // Event Handlers
+    // -------------------------------------------------------------------------
+    const handleBarCodeScanned = useCallback(({ data, bounds }) => {
+        // Skip if already scanned, loading, or processing
+        if (scanned || loading || isProcessing.current) return;
 
-    // Handle manual search
+        const now = Date.now();
+        const barcode = String(data).trim();
+
+        // Throttle: ignore scans within SCAN_THROTTLE_MS
+        if (now - lastScanTime.current < SCAN_THROTTLE_MS) return;
+
+        // Ignore same barcode within cooldown period
+        if (barcode === lastBarcode.current && now - lastScanTime.current < SCAN_COOLDOWN_MS) return;
+
+        // Validate barcode length (typical barcodes are 5-13 digits)
+        if (barcode.length < 5 || barcode.length > 20) return;
+
+        // Update refs
+        lastScanTime.current = now;
+        lastBarcode.current = barcode;
+        isProcessing.current = true;
+
+        // Process scan
+        setScanned(true);
+        lookupBarcode(barcode).finally(() => {
+            isProcessing.current = false;
+        });
+    }, [scanned, loading, storecode]);
+
     const handleManualSearch = () => {
         if (!manualBarcode.trim()) return;
         setScanned(true);
         lookupBarcode(manualBarcode.trim());
     };
 
-    // Navigate to create POG request
-    const handleCreateRequest = () => {
-        if (result?.found) {
-            navigation.navigate('CreatePogRequest', {
-                barcode: result.barcode,
-                productName: result.productName,
-                currentShelf: result.shelfCode,
-                currentRow: result.rowNo,
-                currentIndex: result.index,
-            });
-        } else if (result?.barcode) {
-            // Not found - can add new
-            navigation.navigate('CreatePogRequest', {
-                barcode: result.barcode,
-                productName: '',
-                currentShelf: '',
-                currentRow: '',
-                currentIndex: '',
-            });
-        }
-    };
-
-    // Reset scanner
     const resetScanner = () => {
         setScanned(false);
         setResult(null);
         setError('');
         setManualBarcode('');
+        // Reset throttle refs for fresh scan
+        lastBarcode.current = '';
+        isProcessing.current = false;
     };
 
-    // Permission not determined yet
+    const navigateToRequest = (action) => {
+        const params = {
+            barcode: result.barcode,
+            productName: result.productName || '',
+            currentShelf: result.found ? result.shelfCode : '',
+            currentRow: result.found ? result.rowNo : '',
+            currentIndex: result.found ? result.index : '',
+            defaultAction: action,
+            productExists: result.found,
+        };
+        navigation.navigate('CreatePogRequest', params);
+    };
+
+    // -------------------------------------------------------------------------
+    // Render: Permission States
+    // -------------------------------------------------------------------------
     if (permissionLoading) {
         return (
             <SafeAreaView style={styles.container}>
@@ -138,7 +219,6 @@ export default function BarcodeScannerScreen({ navigation }) {
         );
     }
 
-    // Permission denied
     if (hasPermission === false) {
         return (
             <SafeAreaView style={styles.container}>
@@ -163,6 +243,9 @@ export default function BarcodeScannerScreen({ navigation }) {
         );
     }
 
+    // -------------------------------------------------------------------------
+    // Render: Main Screen
+    // -------------------------------------------------------------------------
     return (
         <SafeAreaView style={styles.container}>
             {/* Header */}
@@ -172,7 +255,7 @@ export default function BarcodeScannerScreen({ navigation }) {
                 </TouchableOpacity>
                 <View style={styles.headerInfo}>
                     <Text style={styles.title}>สแกนบาร์โค้ด</Text>
-                    <Text style={styles.subtitle}>สาขา: {storecode}</Text>
+                    <Text style={styles.subtitle}>สาขา: {branchName}</Text>
                 </View>
                 <TouchableOpacity
                     style={styles.keyboardButton}
@@ -210,9 +293,7 @@ export default function BarcodeScannerScreen({ navigation }) {
                     <CameraView
                         style={StyleSheet.absoluteFillObject}
                         facing="back"
-                        barcodeScannerSettings={{
-                            barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39', 'code93', 'itf14', 'codabar', 'qr'],
-                        }}
+                        barcodeScannerSettings={{ barcodeTypes: BARCODE_TYPES }}
                         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
                     />
                     <View style={styles.overlay}>
@@ -227,7 +308,7 @@ export default function BarcodeScannerScreen({ navigation }) {
                 </View>
             )}
 
-            {/* Loading */}
+            {/* Loading State */}
             {loading && (
                 <View style={styles.resultContainer}>
                     <ActivityIndicator size="large" color="#10b981" />
@@ -235,7 +316,7 @@ export default function BarcodeScannerScreen({ navigation }) {
                 </View>
             )}
 
-            {/* Error */}
+            {/* Error State */}
             {error && (
                 <View style={styles.resultContainer}>
                     <Text style={styles.errorIcon}>⚠️</Text>
@@ -246,7 +327,7 @@ export default function BarcodeScannerScreen({ navigation }) {
                 </View>
             )}
 
-            {/* Result */}
+            {/* Result Display */}
             {result && !loading && (
                 <View style={styles.resultContainer}>
                     {result.found ? (
@@ -269,78 +350,46 @@ export default function BarcodeScannerScreen({ navigation }) {
                                     <Text style={styles.detailLabel}>ราคา</Text>
                                     <Text style={styles.detailValue}>{result.price || '-'} ฿</Text>
                                 </View>
-                                <View style={styles.detailItem}>
-                                    <Text style={styles.detailLabel}>Min</Text>
-                                    <Text style={styles.detailValue}>{result.minStore || '-'}</Text>
-                                </View>
-                                <View style={styles.detailItem}>
-                                    <Text style={styles.detailLabel}>Max</Text>
-                                    <Text style={styles.detailValue}>{result.maxStore || '-'}</Text>
-                                </View>
-                                <View style={[styles.detailItem, styles.stockItem]}>
-                                    <Text style={styles.detailLabel}>สต็อค</Text>
-                                    <Text style={styles.stockValue}>{result.stock || '-'}</Text>
-                                </View>
                             </View>
                         </>
                     ) : (
                         <>
-                            <View style={styles.notFoundBadge}>
-                                <Text style={styles.notFoundBadgeText}>✗ ไม่พบสินค้า</Text>
+                            <View style={[styles.notFoundBadge, result.isMasterFound && { backgroundColor: '#fef3c7' }]}>
+                                <Text style={[styles.notFoundBadgeText, result.isMasterFound && { color: '#b45309' }]}>
+                                    {result.isMasterFound ? '⚠️ ยังไม่ลง Planogram' : '✗ ไม่พบสินค้า'}
+                                </Text>
                             </View>
+                            {result.productName && <Text style={styles.productName}>{result.productName}</Text>}
                             <Text style={styles.barcodeText}>บาร์โค้ด: {result.barcode}</Text>
                             <Text style={styles.reasonText}>{result.reason}</Text>
                         </>
                     )}
 
-                    {/* Actions based on found/not found */}
+                    {/* Action Buttons */}
                     <View style={styles.actionsRow}>
                         <TouchableOpacity style={styles.scanAgainButton} onPress={resetScanner}>
                             <Text style={styles.scanAgainButtonText}>สแกนใหม่</Text>
                         </TouchableOpacity>
 
                         {result.found ? (
-                            // Found: can Move or Delete
                             <>
                                 <TouchableOpacity
                                     style={styles.moveButton}
-                                    onPress={() => navigation.navigate('CreatePogRequest', {
-                                        barcode: result.barcode,
-                                        productName: result.productName,
-                                        currentShelf: result.shelfCode,
-                                        currentRow: result.rowNo,
-                                        currentIndex: result.index,
-                                        defaultAction: 'move',
-                                    })}
+                                    onPress={() => navigateToRequest('move')}
                                 >
                                     <Text style={styles.moveButtonText}>↔️ ย้าย</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     style={styles.deleteButton}
-                                    onPress={() => navigation.navigate('CreatePogRequest', {
-                                        barcode: result.barcode,
-                                        productName: result.productName,
-                                        currentShelf: result.shelfCode,
-                                        currentRow: result.rowNo,
-                                        currentIndex: result.index,
-                                        defaultAction: 'delete',
-                                    })}
+                                    onPress={() => navigateToRequest('delete')}
                                 >
                                     <Text style={styles.deleteButtonText}>🗑️ ลบ</Text>
                                 </TouchableOpacity>
                             </>
                         ) : (
-                            // Not found: can Add only
                             <TouchableOpacity
                                 style={styles.addButton}
-                                onPress={() => navigation.navigate('CreatePogRequest', {
-                                    barcode: result.barcode,
-                                    productName: '',
-                                    currentShelf: '',
-                                    currentRow: '',
-                                    currentIndex: '',
-                                    defaultAction: 'add',
-                                })}
+                                onPress={() => navigateToRequest('add')}
                             >
                                 <Text style={styles.addButtonText}>➕ เพิ่มสินค้า</Text>
                             </TouchableOpacity>
@@ -352,13 +401,26 @@ export default function BarcodeScannerScreen({ navigation }) {
     );
 }
 
+// =============================================================================
+// STYLES
+// =============================================================================
+
 const styles = StyleSheet.create({
+    // Layout
     container: {
         flex: 1,
         backgroundColor: '#1e293b',
         paddingTop: 24,
         paddingBottom: 16,
     },
+    centerContent: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+
+    // Header
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -392,6 +454,8 @@ const styles = StyleSheet.create({
     keyboardButtonText: {
         fontSize: 24,
     },
+
+    // Manual Input
     manualInputContainer: {
         flexDirection: 'row',
         padding: 12,
@@ -422,6 +486,8 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#fff',
     },
+
+    // Camera
     cameraContainer: {
         flex: 1,
         position: 'relative',
@@ -476,17 +542,15 @@ const styles = StyleSheet.create({
         color: '#fff',
         textAlign: 'center',
     },
-    centerContent: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
-    },
+
+    // Loading
     loadingText: {
         marginTop: 16,
         fontSize: 14,
         color: '#94a3b8',
     },
+
+    // Result Container
     resultContainer: {
         flex: 1,
         padding: 20,
@@ -494,6 +558,8 @@ const styles = StyleSheet.create({
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
     },
+
+    // Found Badge
     foundBadge: {
         backgroundColor: '#d1fae5',
         paddingHorizontal: 12,
@@ -507,6 +573,8 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#059669',
     },
+
+    // Not Found Badge
     notFoundBadge: {
         backgroundColor: '#fee2e2',
         paddingHorizontal: 12,
@@ -520,6 +588,8 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#dc2626',
     },
+
+    // Product Info
     productName: {
         fontSize: 18,
         fontWeight: '600',
@@ -536,6 +606,8 @@ const styles = StyleSheet.create({
         color: '#64748b',
         marginBottom: 16,
     },
+
+    // Location Box
     locationBox: {
         backgroundColor: '#f0f9ff',
         padding: 14,
@@ -552,6 +624,8 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#0369a1',
     },
+
+    // Details Row
     detailsRow: {
         flexDirection: 'row',
         backgroundColor: '#f8fafc',
@@ -573,16 +647,8 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#374151',
     },
-    stockItem: {
-        backgroundColor: '#ecfdf5',
-        borderRadius: 8,
-        paddingVertical: 6,
-    },
-    stockValue: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#059669',
-    },
+
+    // Action Buttons
     actionsRow: {
         flexDirection: 'row',
         gap: 12,
@@ -599,18 +665,6 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '600',
         color: '#475569',
-    },
-    requestButton: {
-        flex: 1,
-        backgroundColor: '#f59e0b',
-        paddingVertical: 14,
-        borderRadius: 10,
-        alignItems: 'center',
-    },
-    requestButtonText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#fff',
     },
     moveButton: {
         flex: 1,
@@ -648,6 +702,8 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#fff',
     },
+
+    // Error States
     errorIcon: {
         fontSize: 48,
         marginBottom: 12,
