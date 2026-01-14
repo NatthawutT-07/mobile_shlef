@@ -1,0 +1,39 @@
+{
+    "cli": {
+        "version": ">= 3.0.0"
+    },
+    "build": {
+        "internal": {
+            "distribution": "internal",
+            "android": {
+                "buildType": "apk",
+                "gradleCommand": ":app:assembleRelease"
+            },
+            "ios": {
+                "simulator": false
+            }
+        },
+        "preview": {
+            "distribution": "internal",
+            "android": {
+                "buildType": "apk"
+            }
+        },
+        "production": {
+            "android": {
+                "buildType": "app-bundle"
+            },
+            "ios": {}
+        },
+        "production-apk": {
+            "distribution": "internal",
+            "android": {
+                "buildType": "apk",
+                "gradleCommand": ":app:assembleRelease"
+            }
+        }
+    },
+    "submit": {
+        "production": {}
+    }
+}
