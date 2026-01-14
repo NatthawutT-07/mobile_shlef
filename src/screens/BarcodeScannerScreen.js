@@ -386,14 +386,14 @@ export default function BarcodeScannerScreen({ navigation }) {
                                     <Text style={styles.deleteButtonText}>🗑️ ลบ</Text>
                                 </TouchableOpacity>
                             </>
-                        ) : (
+                        ) : result.isMasterFound ? (
                             <TouchableOpacity
                                 style={styles.addButton}
                                 onPress={() => navigateToRequest('add')}
                             >
                                 <Text style={styles.addButtonText}>➕ เพิ่มสินค้า</Text>
                             </TouchableOpacity>
-                        )}
+                        ) : null}
                     </View>
                 </View>
             )}

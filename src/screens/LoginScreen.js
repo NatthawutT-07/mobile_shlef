@@ -77,7 +77,7 @@ export default function LoginScreen({ navigation }) {
                 >
                     <View style={styles.logoContainer}>
                         <Image
-                            source={require('../../assets/icon.png')}
+                            source={require('../../assets/homepage.png')}
                             style={styles.logoImage}
                             resizeMode="contain"
                         />
@@ -185,7 +185,7 @@ export default function LoginScreen({ navigation }) {
                     </View>
 
                     {/* Footer */}
-                    <Text style={styles.footer}>BMR Planogram v1.1</Text>
+                    <Text style={styles.footer}>BMR Planogram v1.0.1</Text>
                 </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>

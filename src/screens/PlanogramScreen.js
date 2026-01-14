@@ -13,7 +13,7 @@ import {
     Alert,
 } from 'react-native';
 import useAuthStore from '../store/authStore';
-import { getTemplateAndProduct } from '../api/user';
+import { getTemplateAndProduct, getStockLastUpdate } from '../api/user';
 import { getErrorMessage } from '../utils/errorHelper';
 
 // Group products by shelf
@@ -43,10 +43,25 @@ const groupByShelf = (items) => {
     });
 };
 
-// Format display value
 const formatValue = (v) => {
     if (v === null || v === undefined || v === 0) return '-';
     return v;
+};
+
+// Format Bangkok time
+const formatBangkokTime = (value) => {
+    if (!value) return '-';
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return '-';
+    return d.toLocaleString('th-TH', {
+        timeZone: 'Asia/Bangkok',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
 };
 
 export default function PlanogramScreen({ navigation }) {
@@ -60,6 +75,7 @@ export default function PlanogramScreen({ navigation }) {
     const [branchName, setBranchName] = useState('');
     const [searchText, setSearchText] = useState('');
     const [expandedShelf, setExpandedShelf] = useState(null);
+    const [stockUpdatedAt, setStockUpdatedAt] = useState(null);
 
     const loadData = async (isRefresh = false) => {
         if (!storecode) return;
@@ -91,6 +107,10 @@ export default function PlanogramScreen({ navigation }) {
 
     useEffect(() => {
         loadData();
+        // Load stock update time
+        getStockLastUpdate()
+            .then((res) => setStockUpdatedAt(res?.updatedAt))
+            .catch(() => { });
     }, [storecode]);
 
     const shelves = useMemo(() => groupByShelf(data), [data]);
@@ -216,10 +236,18 @@ export default function PlanogramScreen({ navigation }) {
                     <Text style={styles.backButtonText}>‹ กลับ</Text>
                 </TouchableOpacity>
                 <View style={styles.headerInfo}>
-                    <Text style={styles.title}>Planogram</Text>
-                    <Text style={styles.subtitle}>
-                        {branchName || storecode}
-                    </Text>
+                    <View style={styles.titleRow}>
+                        <Text style={styles.title}>Planogram</Text>
+                        <Text style={styles.titleSeparator}> - </Text>
+                        <Text style={styles.subtitle} numberOfLines={1}>
+                            {branchName?.includes('/') ? branchName.split('/').pop().trim() : (branchName || storecode)}
+                        </Text>
+                    </View>
+                    {stockUpdatedAt && (
+                        <Text style={styles.stockTimeText}>
+                            Stock ล่าสุด: {formatBangkokTime(stockUpdatedAt)}
+                        </Text>
+                    )}
                 </View>
             </View>
 
@@ -296,14 +324,27 @@ const styles = StyleSheet.create({
     headerInfo: {
         flex: 1,
     },
+    titleRow: {
+        flexDirection: 'row',
+        alignItems: 'baseline',
+    },
     title: {
         fontSize: 18,
         fontWeight: '600',
         color: '#1e293b',
     },
+    titleSeparator: {
+        fontSize: 14,
+        color: '#94a3b8',
+    },
     subtitle: {
         fontSize: 12,
         color: '#64748b',
+    },
+    stockTimeText: {
+        fontSize: 10,
+        color: '#10b981',
+        marginTop: 2,
     },
     addButton: {
         backgroundColor: '#f59e0b',

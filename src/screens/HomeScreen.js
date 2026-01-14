@@ -8,7 +8,7 @@
 // =============================================================================
 
 // React
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 
 // React Native
 import {
@@ -24,6 +24,7 @@ import {
 
 // Local imports
 import useAuthStore from '../store/authStore';
+import useUpdateStore from '../store/updateStore';
 import { BRANCHES } from '../constants/branches';
 
 // =============================================================================
@@ -44,6 +45,13 @@ export default function HomeScreen({ navigation }) {
     const logout = useAuthStore((s) => s.logout);
     const [showLogoutModal, setShowLogoutModal] = useState(false);
 
+    // Update state
+    const hasUpdate = useUpdateStore((s) => s.hasUpdate);
+    const setHasUpdate = useUpdateStore((s) => s.setHasUpdate);
+    const setSkipUpdate = useUpdateStore((s) => s.setSkipUpdate);
+    const skipUpdate = useUpdateStore((s) => s.skipUpdate);
+    const [showUpdateModal, setShowUpdateModal] = useState(false);
+
     // -------------------------------------------------------------------------
     // Derived Values
     // -------------------------------------------------------------------------
@@ -53,6 +61,44 @@ export default function HomeScreen({ navigation }) {
         const branch = BRANCHES.find((b) => b.code === code);
         return branch ? branch.label.replace(`${code} - `, '') : code;
     }, [user]);
+
+    // -------------------------------------------------------------------------
+    // Effects
+    // -------------------------------------------------------------------------
+    useEffect(() => {
+        // Check for updates on mount (for native platforms)
+        checkForUpdates();
+    }, []);
+
+    const checkForUpdates = async () => {
+        // Skip on web or development
+        if (Platform.OS === 'web') return;
+
+        try {
+            const Updates = await import('expo-updates');
+            const update = await Updates.checkForUpdateAsync();
+
+            if (update.isAvailable) {
+                setHasUpdate(true, update.manifest);
+                if (!skipUpdate) {
+                    setShowUpdateModal(true);
+                }
+            }
+        } catch (err) {
+            // Ignore errors in dev mode
+            console.log('Update check:', err.message);
+        }
+    };
+
+    const handleUpdateNow = () => {
+        setShowUpdateModal(false);
+        navigation.navigate('Update');
+    };
+
+    const handleUpdateLater = () => {
+        setShowUpdateModal(false);
+        setSkipUpdate(true);
+    };
 
     // -------------------------------------------------------------------------
     // Menu Configuration
@@ -120,9 +166,21 @@ export default function HomeScreen({ navigation }) {
                 <View>
                     <Text style={styles.storeName}>สาขา {branchName}</Text>
                 </View>
-                <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                    <Text style={styles.logoutButtonText}>ออก</Text>
-                </TouchableOpacity>
+                <View style={styles.headerRight}>
+                    {/* Update Icon */}
+                    {hasUpdate && (
+                        <TouchableOpacity
+                            style={styles.updateButton}
+                            onPress={() => setShowUpdateModal(true)}
+                        >
+                            <Text style={styles.updateButtonText}>🔔</Text>
+                            <View style={styles.updateBadge} />
+                        </TouchableOpacity>
+                    )}
+                    <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+                        <Text style={styles.logoutButtonText}>ออก</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
 
             {/* Main Content */}
@@ -188,6 +246,36 @@ export default function HomeScreen({ navigation }) {
                     </View>
                 </View>
             </Modal>
+
+            {/* Update Available Modal */}
+            <Modal visible={showUpdateModal} transparent animationType="fade">
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContainer}>
+                        <Text style={styles.updateIcon}>🔄</Text>
+                        <Text style={styles.modalTitle}>มีเวอร์ชั่นใหม่!</Text>
+                        <Text style={styles.modalMessage}>
+                            มีการอัพเดทแอพพลิเคชันใหม่{'\n'}
+                            ต้องการอัพเดทตอนนี้เลยหรือไม่?
+                        </Text>
+
+                        <View style={styles.modalButtons}>
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.modalButtonCancel]}
+                                onPress={handleUpdateLater}
+                            >
+                                <Text style={styles.modalButtonTextCancel}>ภายหลัง</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.modalButtonUpdate]}
+                                onPress={handleUpdateNow}
+                            >
+                                <Text style={styles.modalButtonTextConfirm}>อัพเดทเลย</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -226,6 +314,27 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '600',
         color: '#1e293b',
+    },
+    headerRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    updateButton: {
+        position: 'relative',
+        padding: 8,
+    },
+    updateButtonText: {
+        fontSize: 22,
+    },
+    updateBadge: {
+        position: 'absolute',
+        top: 6,
+        right: 6,
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: '#ef4444',
     },
     logoutButton: {
         backgroundColor: '#fef2f2',
@@ -371,5 +480,12 @@ const styles = StyleSheet.create({
     modalButtonTextConfirm: {
         fontWeight: '600',
         color: '#dc2626',
+    },
+    updateIcon: {
+        fontSize: 48,
+        marginBottom: 12,
+    },
+    modalButtonUpdate: {
+        backgroundColor: '#10b981',
     },
 });

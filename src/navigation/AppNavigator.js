@@ -11,6 +11,7 @@ import PlanogramScreen from '../screens/PlanogramScreen';
 import PogRequestsScreen from '../screens/PogRequestsScreen';
 import CreatePogRequestScreen from '../screens/CreatePogRequestScreen';
 import BarcodeScannerScreen from '../screens/BarcodeScannerScreen';
+import UpdateScreen from '../screens/UpdateScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -24,6 +25,13 @@ function AuthStack() {
                 component={BranchSelectScreen}
                 options={{
                     animation: 'slide_from_right',
+                }}
+            />
+            <Stack.Screen
+                name="Update"
+                component={UpdateScreen}
+                options={{
+                    animation: 'fade',
                 }}
             />
         </Stack.Navigator>
@@ -61,6 +69,13 @@ function AppStack() {
                 component={BarcodeScannerScreen}
                 options={{
                     animation: 'slide_from_bottom',
+                }}
+            />
+            <Stack.Screen
+                name="Update"
+                component={UpdateScreen}
+                options={{
+                    animation: 'fade',
                 }}
             />
         </Stack.Navigator>
