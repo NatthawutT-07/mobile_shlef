@@ -183,6 +183,7 @@ export default function LoginScreen({ navigation }) {
                             </View>
                         ) : null}
                     </View>
+                    <Text style={styles.operatingHours}>เวลาทำการระบบ 08.30 - 18.00 น.</Text>
 
                     {/* Footer */}
                     <Text style={styles.footer}>BMR Planogram v1.0.1</Text>
@@ -221,6 +222,13 @@ const styles = StyleSheet.create({
         fontSize: 24,
         fontWeight: '600',
         color: '#10b981',
+    },
+    operatingHours: {
+        fontSize: 14,
+        color: '#64748b',
+        fontWeight: '500',
+        marginTop: 16,
+        textAlign: 'center',
     },
     card: {
         backgroundColor: '#fff',

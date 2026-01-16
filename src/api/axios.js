@@ -82,16 +82,29 @@ api.interceptors.response.use(
                 originalRequest.headers.Authorization = `Bearer ${newToken}`;
                 return api(originalRequest);
             } catch (refreshError) {
-                // Refresh failed - force logout
+                // Refresh failed - force logout immediately
                 isRefreshing = false;
                 refreshSubscribers = [];
 
                 // Clear storage
                 await AsyncStorage.multiRemove(['accessToken', 'user']);
 
-                // Dispatch event to notify app (will be caught by auth store)
+                // Force logout by setting global flag and reloading
                 if (typeof global !== 'undefined') {
                     global.authExpired = true;
+
+                    // Force app state update by importing store directly
+                    try {
+                        const useAuthStore = require('../store/authStore').default;
+                        useAuthStore.setState({
+                            user: null,
+                            accessToken: null,
+                            isLoggedIn: false,
+                            isLoading: false,
+                        });
+                    } catch (e) {
+                        console.log('Force logout error:', e);
+                    }
                 }
 
                 return Promise.reject(refreshError);

@@ -128,14 +128,14 @@ export default function HomeScreen({ navigation }) {
             screen: 'PogRequests',
             enabled: true,
         },
-        {
-            id: 'reports',
-            icon: '📊',
-            title: 'รายงาน',
-            subtitle: 'เร็วๆ นี้',
-            screen: null,
-            enabled: false,
-        },
+        // {
+        //     id: 'reports',
+        //     icon: '📊',
+        //     title: 'รายงาน',
+        //     subtitle: 'เร็วๆ นี้',
+        //     screen: null,
+        //     enabled: false,
+        // },
     ];
 
     // -------------------------------------------------------------------------

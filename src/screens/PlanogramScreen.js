@@ -202,7 +202,9 @@ export default function PlanogramScreen({ navigation }) {
                                                 {/* Quick Stats */}
                                                 <View style={styles.quickStats}>
                                                     <Text style={styles.statText}>฿{formatValue(product.salesPriceIncVAT)}</Text>
-                                                    <Text style={styles.stockText}>สต็อค {formatValue(product.stockQuantity)}</Text>
+                                                    <Text style={styles.minMaxText}>
+                                                        Min {formatValue(product.minStore)} / Max {formatValue(product.maxStore)}  <Text style={styles.stockText}>สต็อค {formatValue(product.stockQuantity)}</Text>
+                                                    </Text>
                                                 </View>
 
                                                 {/* Small Edit Button */}
@@ -276,6 +278,10 @@ export default function PlanogramScreen({ navigation }) {
                     renderItem={renderShelfItem}
                     contentContainerStyle={styles.listContent}
                     showsVerticalScrollIndicator={false}
+                    initialNumToRender={5}
+                    windowSize={5}
+                    maxToRenderPerBatch={5}
+                    removeClippedSubviews={true}
                     refreshControl={
                         <RefreshControl
                             refreshing={refreshing}
@@ -520,6 +526,11 @@ const styles = StyleSheet.create({
     stockText: {
         fontSize: 10,
         color: '#059669',
+        fontWeight: '500',
+    },
+    minMaxText: {
+        fontSize: 9,
+        color: '#6366f1',
         fontWeight: '500',
     },
     editButton: {
