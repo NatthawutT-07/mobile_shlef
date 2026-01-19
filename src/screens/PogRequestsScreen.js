@@ -18,12 +18,12 @@ import {
     StyleSheet,
     FlatList,
     ActivityIndicator,
-    SafeAreaView,
     RefreshControl,
     Alert,
     Platform,
     Modal,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Local imports
 import useAuthStore from '../store/authStore';
@@ -231,7 +231,7 @@ export default function PogRequestsScreen({ navigation }) {
                     <Text style={styles.backButtonText}>‹ กลับ</Text>
                 </TouchableOpacity>
                 <View style={styles.headerInfo}>
-                    <Text style={styles.title}>ประวัติคำขอ POG</Text>
+                    <Text style={styles.title}>ประวัติคำขอสาขา</Text>
                     <Text style={styles.subtitle}>
                         {branchName} - ทั้งหมด {data.length} รายการ
                     </Text>

@@ -12,6 +12,7 @@ import PogRequestsScreen from '../screens/PogRequestsScreen';
 import CreatePogRequestScreen from '../screens/CreatePogRequestScreen';
 import BarcodeScannerScreen from '../screens/BarcodeScannerScreen';
 import UpdateScreen from '../screens/UpdateScreen';
+import ShelfHistoryScreen from '../screens/ShelfHistoryScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -76,6 +77,13 @@ function AppStack() {
                 component={UpdateScreen}
                 options={{
                     animation: 'fade',
+                }}
+            />
+            <Stack.Screen
+                name="ShelfHistory"
+                component={ShelfHistoryScreen}
+                options={{
+                    animation: 'slide_from_right',
                 }}
             />
         </Stack.Navigator>

@@ -16,11 +16,12 @@ import {
     Text,
     TouchableOpacity,
     StyleSheet,
-    SafeAreaView,
     ActivityIndicator,
     Platform,
     TextInput,
+    Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Third-party
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -47,6 +48,9 @@ const SCAN_THROTTLE_MS = 500;
 
 /** Cooldown after successful scan before allowing new scan (ms) */
 const SCAN_COOLDOWN_MS = 2000;
+
+/** Scan frame size (must match styles.scanFrame) */
+const SCAN_FRAME_SIZE = 250;
 
 // =============================================================================
 // MAIN COMPONENT
@@ -148,7 +152,7 @@ export default function BarcodeScannerScreen({ navigation }) {
     // -------------------------------------------------------------------------
     // Event Handlers
     // -------------------------------------------------------------------------
-    const handleBarCodeScanned = useCallback(({ data, bounds }) => {
+    const handleBarCodeScanned = useCallback(({ data, cornerPoints, bounds }) => {
         // Skip if already scanned, loading, or processing
         if (scanned || loading || isProcessing.current) return;
 
@@ -163,6 +167,45 @@ export default function BarcodeScannerScreen({ navigation }) {
 
         // Validate barcode length (typical barcodes are 5-13 digits)
         if (barcode.length < 5 || barcode.length > 20) return;
+
+        // ✅ Check if barcode is within scan frame
+        // Calculate scan frame boundaries (center of screen)
+        const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+        const frameLeft = (screenWidth - SCAN_FRAME_SIZE) / 2;
+        const frameRight = frameLeft + SCAN_FRAME_SIZE;
+        // Adjust for header (~120px) - scan frame is centered in camera view area
+        const cameraTopOffset = 120;
+        const cameraHeight = screenHeight - cameraTopOffset;
+        const frameTop = cameraTopOffset + (cameraHeight - SCAN_FRAME_SIZE) / 2;
+        const frameBottom = frameTop + SCAN_FRAME_SIZE;
+
+        // Check bounds using cornerPoints or bounds object
+        let isInFrame = false;
+        if (cornerPoints && cornerPoints.length > 0) {
+            // Use corner points to determine barcode position
+            const minX = Math.min(...cornerPoints.map(p => p.x));
+            const maxX = Math.max(...cornerPoints.map(p => p.x));
+            const minY = Math.min(...cornerPoints.map(p => p.y));
+            const maxY = Math.max(...cornerPoints.map(p => p.y));
+            const centerX = (minX + maxX) / 2;
+            const centerY = (minY + maxY) / 2;
+
+            isInFrame = centerX >= frameLeft && centerX <= frameRight &&
+                centerY >= frameTop && centerY <= frameBottom;
+        } else if (bounds && bounds.origin) {
+            // Fallback to bounds object
+            const centerX = bounds.origin.x + (bounds.size?.width || 0) / 2;
+            const centerY = bounds.origin.y + (bounds.size?.height || 0) / 2;
+
+            isInFrame = centerX >= frameLeft && centerX <= frameRight &&
+                centerY >= frameTop && centerY <= frameBottom;
+        } else {
+            // If no position data, allow scan (fallback for web/older devices)
+            isInFrame = true;
+        }
+
+        // Reject if barcode is outside frame
+        if (!isInFrame) return;
 
         // Update refs
         lastScanTime.current = now;

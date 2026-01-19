@@ -7,11 +7,11 @@ import {
     StyleSheet,
     FlatList,
     ActivityIndicator,
-    SafeAreaView,
     RefreshControl,
     Platform,
     Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import useAuthStore from '../store/authStore';
 import { getTemplateAndProduct, getStockLastUpdate } from '../api/user';
 import { getErrorMessage } from '../utils/errorHelper';

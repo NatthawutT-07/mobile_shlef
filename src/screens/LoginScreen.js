@@ -10,8 +10,8 @@ import {
     Platform,
     ScrollView,
     ActivityIndicator,
-    SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import useAuthStore from '../store/authStore';
 import { getErrorMessage } from '../utils/errorHelper';
 
@@ -128,8 +128,8 @@ export default function LoginScreen({ navigation }) {
                                 onPress={handleBranchMode}
                                 disabled={isLoading}
                             >
-                                <Text style={styles.branchButtonText}>🏪 เลือกสาขาของคุณ</Text>
-                                <Text style={styles.branchButtonSubtext}>แตะเพื่อเลือกสาขา</Text>
+                                <Text style={styles.branchButtonText}>เลือกสาขาของคุณ</Text>
+                                <Text style={styles.branchButtonSubtext}>›</Text>
                             </TouchableOpacity>
                         )}
 
@@ -274,22 +274,22 @@ const styles = StyleSheet.create({
     },
     branchButton: {
         backgroundColor: '#ecfdf5',
-        borderWidth: 2,
+        borderWidth: 1,
         borderColor: '#10b981',
-        borderStyle: 'dashed',
         borderRadius: 12,
-        padding: 24,
+        padding: 18,
         alignItems: 'center',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
     },
     branchButtonText: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: '600',
         color: '#047857',
-        marginBottom: 4,
     },
     branchButtonSubtext: {
-        fontSize: 13,
-        color: '#6b7280',
+        fontSize: 20,
+        color: '#10b981',
     },
     form: {
         gap: 12,

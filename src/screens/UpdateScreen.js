@@ -8,10 +8,10 @@ import {
     View,
     Text,
     StyleSheet,
-    SafeAreaView,
     ActivityIndicator,
     Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Updates from 'expo-updates';
 import useUpdateStore from '../store/updateStore';
 
@@ -102,11 +102,11 @@ export default function UpdateScreen({ navigation }) {
     const getStatusEmoji = () => {
         switch (status) {
             case 'error':
-                return '❌';
+                return '';
             case 'complete':
-                return '✅';
+                return '';
             default:
-                return '🔄';
+                return '';
         }
     };
 
