@@ -3,14 +3,7 @@
  * Form for submitting product add/move/delete requests
  */
 
-// =============================================================================
-// IMPORTS
-// =============================================================================
-
-// React
 import React, { useState, useEffect, useMemo } from 'react';
-
-// React Native
 import {
     View,
     Text,
@@ -22,33 +15,25 @@ import {
     Modal,
     FlatList,
     Platform,
+    KeyboardAvoidingView
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+    ChevronLeft, Check, X, ChevronDown,
+    Plus, Trash2, ArrowRightLeft,
+    MapPin, ScanLine, FileText, Package
+} from 'lucide-react-native';
 
-// Local imports
 import useAuthStore from '../store/authStore';
-import { createPogRequest, getBranchShelves } from '../api/user';
+import { createPogRequest, getBranchShelves, getMyPogRequests } from '../api/user';
 import { getErrorMessage } from '../utils/errorHelper';
 import { BRANCHES } from '../constants/branches';
-
-// =============================================================================
-// CONSTANTS
-// =============================================================================
-
-/** Available action types for POG requests */
-const ACTION_OPTIONS = [
-    { value: 'add', label: '➕ เพิ่มสินค้า', desc: 'เพิ่มสินค้านี้ไปยังตำแหน่งใหม่' },
-    { value: 'move', label: '↔️ ย้ายตำแหน่ง', desc: 'ย้ายสินค้านี้ไปตำแหน่งอื่น' },
-    { value: 'delete', label: '🗑️ ลบสินค้า', desc: 'ลบสินค้าออกจากตำแหน่งปัจจุบัน' },
-];
 
 // =============================================================================
 // SUB-COMPONENTS
 // =============================================================================
 
-/**
- * CustomPicker - Web-compatible dropdown component
- */
-function CustomPicker({ label, value, options, onChange, placeholder, disabled }) {
+function CustomPicker({ label, value, options, onChange, placeholder, disabled, icon: Icon }) {
     const [isOpen, setIsOpen] = useState(false);
     const selectedOption = options.find((opt) => opt.value === value);
 
@@ -60,10 +45,13 @@ function CustomPicker({ label, value, options, onChange, placeholder, disabled }
                 onPress={() => !disabled && setIsOpen(true)}
                 disabled={disabled}
             >
-                <Text style={[styles.pickerButtonText, !value && styles.pickerPlaceholder]}>
-                    {selectedOption ? selectedOption.label : placeholder}
-                </Text>
-                <Text style={styles.pickerArrow}>▼</Text>
+                <View style={styles.pickerBtnContent}>
+                    {Icon && <Icon size={18} color={value ? '#1e293b' : '#94a3b8'} style={styles.pickerIcon} />}
+                    <Text style={[styles.pickerButtonText, !value && styles.pickerPlaceholder]}>
+                        {selectedOption ? selectedOption.label : placeholder}
+                    </Text>
+                </View>
+                <ChevronDown size={20} color="#94a3b8" />
             </TouchableOpacity>
 
             <Modal visible={isOpen} transparent animationType="fade">
@@ -75,8 +63,8 @@ function CustomPicker({ label, value, options, onChange, placeholder, disabled }
                     <View style={styles.pickerModalContent}>
                         <View style={styles.pickerModalHeader}>
                             <Text style={styles.pickerModalTitle}>{label}</Text>
-                            <TouchableOpacity onPress={() => setIsOpen(false)}>
-                                <Text style={styles.pickerModalClose}>✕</Text>
+                            <TouchableOpacity onPress={() => setIsOpen(false)} style={styles.closeBtn}>
+                                <X size={24} color="#64748b" />
                             </TouchableOpacity>
                         </View>
                         <FlatList
@@ -101,7 +89,7 @@ function CustomPicker({ label, value, options, onChange, placeholder, disabled }
                                     >
                                         {item.label}
                                     </Text>
-                                    {value === item.value && <Text style={styles.pickerOptionCheck}>✓</Text>}
+                                    {value === item.value && <Check size={20} color="#10b981" />}
                                 </TouchableOpacity>
                             )}
                             style={styles.pickerOptionList}
@@ -118,13 +106,10 @@ function CustomPicker({ label, value, options, onChange, placeholder, disabled }
 // =============================================================================
 
 export default function CreatePogRequestScreen({ navigation, route }) {
-    // -------------------------------------------------------------------------
     // State & Store
-    // -------------------------------------------------------------------------
     const user = useAuthStore((s) => s.user);
     const storecode = user?.storecode || user?.name;
 
-    // Form state
     const [action, setAction] = useState(route.params?.defaultAction || '');
     const [barcode, setBarcode] = useState(route.params?.barcode || '');
     const [productName, setProductName] = useState(route.params?.productName || '');
@@ -133,14 +118,13 @@ export default function CreatePogRequestScreen({ navigation, route }) {
     const [toIndex, setToIndex] = useState('');
     const [note, setNote] = useState('');
 
-    // Data state
     const [shelves, setShelves] = useState([]);
+    const [pendingRequests, setPendingRequests] = useState([]);
     const [shelvesLoading, setShelvesLoading] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
 
-    // Route params
     const {
         barcode: initialBarcode = '',
         currentShelf = '',
@@ -149,15 +133,14 @@ export default function CreatePogRequestScreen({ navigation, route }) {
         productExists = false,
     } = route.params || {};
 
-    // -------------------------------------------------------------------------
-    // Derived Values
-    // -------------------------------------------------------------------------
+    // Header Info
     const branchName = useMemo(() => {
         if (!storecode) return 'ผู้ใช้';
         const branch = BRANCHES.find((b) => b.code === storecode);
         return branch ? branch.label.replace(`${storecode} - `, '') : storecode;
     }, [storecode]);
 
+    // Derived Selection Data
     const selectedShelfData = useMemo(() => {
         if (!toShelf) return null;
         return shelves.find((s) => s.shelfCode === toShelf);
@@ -211,9 +194,7 @@ export default function CreatePogRequestScreen({ navigation, route }) {
 
     const productExistsInShelf = existingProduct !== null;
 
-    // -------------------------------------------------------------------------
     // Effects
-    // -------------------------------------------------------------------------
     useEffect(() => {
         if (!storecode) return;
         const loadShelves = async () => {
@@ -228,6 +209,18 @@ export default function CreatePogRequestScreen({ navigation, route }) {
             }
         };
         loadShelves();
+
+        // Load existing pending requests to check for duplicates
+        const loadPendingRequests = async () => {
+            try {
+                const result = await getMyPogRequests(storecode);
+                const pending = (result?.data || []).filter(r => r.status === 'pending');
+                setPendingRequests(pending);
+            } catch (err) {
+                console.error('Load pending requests error:', err);
+            }
+        };
+        loadPendingRequests();
     }, [storecode]);
 
     useEffect(() => {
@@ -243,9 +236,7 @@ export default function CreatePogRequestScreen({ navigation, route }) {
         setToIndex('');
     }, [toRow]);
 
-    // -------------------------------------------------------------------------
-    // Event Handlers
-    // -------------------------------------------------------------------------
+    // Handle Submit
     const handleSubmit = async () => {
         if (loading) return;
 
@@ -259,6 +250,15 @@ export default function CreatePogRequestScreen({ navigation, route }) {
         }
         if ((action === 'add' || action === 'move') && (!toShelf || !toRow || !toIndex)) {
             setError('กรุณาระบุตำแหน่งให้ครบถ้วน');
+            return;
+        }
+
+        // Check for duplicate pending request
+        const existingPending = pendingRequests.find(
+            r => String(r.barcode).trim() === String(barcode).trim()
+        );
+        if (existingPending) {
+            setError(`บาร์โค้ดนี้มีคำขอรอดำเนินการอยู่แล้ว (${existingPending.action === 'add' ? 'เพิ่ม' : existingPending.action === 'move' ? 'ย้าย' : 'ลบ'})`);
             return;
         }
 
@@ -290,259 +290,251 @@ export default function CreatePogRequestScreen({ navigation, route }) {
 
     const handleCloseSuccess = () => {
         setSuccess(false);
-        navigation.goBack();
+        if (route.params?.source === 'BarcodeScanner') {
+            navigation.navigate('BarcodeScanner', { success: true });
+        } else {
+            navigation.goBack();
+        }
     };
 
-    // -------------------------------------------------------------------------
-    // Render Helpers
-    // -------------------------------------------------------------------------
-    const renderActionOptions = () => (
-        <View style={styles.actionOptionsRow}>
-            {ACTION_OPTIONS.map((opt) => {
-                const isAddDisabled = opt.value === 'add' && (productExistsInShelf || productExists);
-                const isMoveDisabled = opt.value === 'move' && !productExistsInShelf && !productExists;
-                const isDeleteDisabled = opt.value === 'delete' && !productExistsInShelf && !productExists;
-                const isDisabled = isAddDisabled || isMoveDisabled || isDeleteDisabled;
-
-                return (
-                    <TouchableOpacity
-                        key={opt.value}
-                        style={[
-                            styles.actionOptionBlock,
-                            action === opt.value && styles.actionOptionBlockActive,
-                            isDisabled && styles.actionOptionBlockDisabled,
-                        ]}
-                        onPress={() => !isDisabled && setAction(opt.value)}
-                        disabled={isDisabled}
-                    >
-                        <Text
-                            style={[
-                                styles.actionBlockLabel,
-                                action === opt.value && styles.actionBlockLabelActive,
-                                isDisabled && styles.actionBlockLabelDisabled,
-                            ]}
-                        >
-                            {opt.label}
-                        </Text>
-                    </TouchableOpacity>
-                );
-            })}
-        </View>
-    );
-
-    // -------------------------------------------------------------------------
-    // Render
-    // -------------------------------------------------------------------------
     return (
-        <View style={styles.container}>
-            {/* Success Modal */}
-            <Modal visible={success} transparent animationType="fade">
-                <TouchableOpacity
-                    style={styles.successOverlay}
-                    activeOpacity={1}
-                    onPress={handleCloseSuccess}
-                >
-                    <View style={styles.successPopup}>
-                        <Text style={styles.successPopupIcon}>✅</Text>
-                        <Text style={styles.successPopupTitle}>ส่งคำขอสำเร็จ!</Text>
-                        <Text style={styles.successPopupText}>รอดำเนินการ</Text>
-                        <TouchableOpacity style={styles.successPopupButton} onPress={handleCloseSuccess}>
-                            <Text style={styles.successPopupButtonText}>ตกลง</Text>
-                        </TouchableOpacity>
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={{ flex: 1 }}
+            >
+                {/* Header */}
+                <View style={styles.header}>
+                    <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+                        <ChevronLeft size={24} color="#10b981" />
+                        <Text style={styles.backButtonText}>กลับ</Text>
+                    </TouchableOpacity>
+                    <View style={styles.headerInfo}>
+                        <Text style={styles.title}>แจ้งขอเปลี่ยนแปลง</Text>
+                        <Text style={styles.subtitle}>{branchName}</Text>
                     </View>
-                </TouchableOpacity>
-            </Modal>
-
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-                    <Text style={styles.backButtonText}>‹ กลับ</Text>
-                </TouchableOpacity>
-                <View style={styles.headerInfo}>
-                    <Text style={styles.title}>แจ้งขอเปลี่ยนแปลง</Text>
-                    <Text style={styles.subtitle}>สาขา: {branchName}</Text>
                 </View>
-            </View>
 
-            <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-                {/* Product Info Section */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>ข้อมูลสินค้า</Text>
+                <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+                    {/* Action Selection - Compact */}
+                    <View style={styles.section}>
+                        <View style={styles.compactActionContainer}>
+                            {[
+                                { id: 'add', label: 'นำสินค้าเข้า', icon: Plus, color: '#166534', bg: '#dcfce7', disabled: productExistsInShelf || productExists },
+                                { id: 'move', label: 'เปลี่ยนตำแหน่งสินค้า', icon: ArrowRightLeft, color: '#1e40af', bg: '#dbeafe', disabled: !productExistsInShelf && !productExists },
+                                { id: 'delete', label: 'นำสินค้าออก', icon: Trash2, color: '#991b1b', bg: '#fee2e2', disabled: !productExistsInShelf && !productExists },
+                            ].map((opt) => {
+                                const isActive = action === opt.id;
+                                const isDisabled = opt.disabled;
+                                return (
+                                    <TouchableOpacity
+                                        key={opt.id}
+                                        style={[
+                                            styles.compactActionBtn,
+                                            isActive && { backgroundColor: opt.bg, borderColor: opt.bg },
+                                            isDisabled && styles.compactActionDisabled
+                                        ]}
+                                        onPress={() => !isDisabled && setAction(opt.id)}
+                                        disabled={isDisabled}
+                                    >
+                                        <opt.icon
+                                            size={24}
+                                            color={isActive ? opt.color : (isDisabled ? '#94a3b8' : '#64748b')}
+                                        />
+                                        <Text style={[
+                                            styles.compactActionText,
+                                            isActive && { color: opt.color, fontWeight: '700' },
+                                            isDisabled && { color: '#94a3b8' }
+                                        ]}>
+                                            {opt.label}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+                    </View>
 
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>บาร์โค้ด *</Text>
-                        {initialBarcode ? (
-                            <View style={styles.readOnlyBox}>
-                                <Text style={styles.readOnlyText}>{barcode}</Text>
+                    {/* Product Info - Compact Mode */}
+                    <View style={styles.section}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                            <Text style={styles.sectionTitle}>ข้อมูลสินค้า</Text>
+                        </View>
+
+                        <View style={styles.compactInputContainer}>
+                            {/* Barcode */}
+                            <View style={[styles.compactInputRow, { borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }]}>
+                                <View style={styles.compactIconWrapper}>
+                                    <ScanLine size={18} color="#64748b" />
+                                </View>
+                                <TextInput
+                                    style={styles.compactInput}
+                                    value={barcode}
+                                    onChangeText={setBarcode}
+                                    placeholder="รหัสบาร์โค้ด"
+                                    placeholderTextColor="#94a3b8"
+                                    keyboardType="numeric"
+                                    editable={!initialBarcode}
+                                />
                             </View>
-                        ) : (
-                            <TextInput
-                                style={styles.input}
-                                value={barcode}
-                                onChangeText={setBarcode}
-                                placeholder="กรอกบาร์โค้ด"
-                                placeholderTextColor="#94a3b8"
-                                keyboardType="numeric"
-                            />
-                        )}
-                        {!initialBarcode && barcode && !shelvesLoading && (
-                            <View style={[styles.lookupResult, productExistsInShelf ? styles.lookupResultFound : styles.lookupResultNotFound]}>
-                                <Text style={productExistsInShelf ? styles.lookupResultFoundText : styles.lookupResultNotFoundText}>
+
+                            {/* Product Name */}
+                            <View style={styles.compactInputRow}>
+                                <View style={styles.compactIconWrapper}>
+                                    <FileText size={18} color="#64748b" />
+                                </View>
+                                <TextInput
+                                    style={styles.compactInput}
+                                    value={productName}
+                                    onChangeText={setProductName}
+                                    placeholder="ชื่อสินค้า (ระบุถ้าทราบ)"
+                                    placeholderTextColor="#94a3b8"
+                                    editable={!initialBarcode}
+                                />
+                            </View>
+                        </View>
+
+                        {/* Status Badge - Compact */}
+                        {!initialBarcode && barcode.length > 0 && !shelvesLoading && (
+                            <View style={[styles.compactStatus, productExistsInShelf ? styles.badgeSuccess : styles.badgeError]}>
+                                {productExistsInShelf ? <Check size={12} color="#166534" /> : <X size={12} color="#991b1b" />}
+                                <Text style={[styles.statusBadgeText, productExistsInShelf ? styles.textSuccess : styles.textError]}>
                                     {productExistsInShelf
-                                        ? `✓ พบในสาขา: ${existingProduct?.shelfCode} / ชั้น ${existingProduct?.rowNo} / ลำดับ ${existingProduct?.index}`
-                                        : '✗ ไม่พบสินค้านี้ใน Planogram'}
+                                        ? `มีในระบบ: ${existingProduct?.shelfCode} (ชั้น ${existingProduct?.rowNo})`
+                                        : 'ไม่พบ (เพิ่มใหม่ได้)'}
+                                </Text>
+                            </View>
+                        )}
+
+                        {/* Current Location (if product exists) - Compact */}
+                        {(productExistsInShelf || (currentShelf && initialBarcode)) && (
+                            <View style={styles.compactLocationBox}>
+                                <MapPin size={14} color="#0369a1" style={{ marginRight: 6 }} />
+                                <Text style={styles.compactLocationLabel}>ปัจจุบัน:</Text>
+                                <Text style={styles.compactLocationText}>
+                                    {existingProduct
+                                        ? `${existingProduct.shelfCode} / ชั้น ${existingProduct.rowNo} / ลำดับ ${existingProduct.index}`
+                                        : `${currentShelf} / ชั้น ${currentRow} / ลำดับ ${currentIndex}`
+                                    }
                                 </Text>
                             </View>
                         )}
                     </View>
 
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>ชื่อสินค้า</Text>
-                        {initialBarcode ? (
-                            <View style={styles.readOnlyBox}>
-                                <Text style={styles.readOnlyText}>{productName || '-'}</Text>
-                            </View>
-                        ) : (
-                            <TextInput
-                                style={styles.input}
-                                value={productName}
-                                onChangeText={setProductName}
-                                placeholder="ชื่อสินค้า (ถ้าทราบ)"
-                                placeholderTextColor="#94a3b8"
-                            />
-                        )}
-                    </View>
-
-                    {currentShelf && (
-                        <View style={styles.currentPositionBox}>
-                            <Text style={styles.currentPositionLabel}>ตำแหน่งปัจจุบัน:</Text>
-                            <Text style={styles.currentPositionText}>
-                                {currentShelf} / ชั้น {currentRow} / ลำดับ {currentIndex}
+                    {/* Target Location */}
+                    {(action === 'add' || action === 'move') && (
+                        <View style={styles.section}>
+                            <Text style={styles.sectionTitle}>
+                                {action === 'add' ? 'ตำแหน่งที่ต้องการเพิ่ม' : 'ย้ายไปที่ตำแหน่ง'}
                             </Text>
-                        </View>
-                    )}
-                </View>
 
-                {/* Action Selection Section */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>เลือกประเภทการเปลี่ยนแปลง</Text>
-                    {productExistsInShelf && existingProduct && (
-                        <View style={styles.existingLocationBox}>
-                            <Text style={styles.existingLocationText}>
-                                📍 สินค้านี้อยู่ที่: {existingProduct.shelfCode} / ชั้น {existingProduct.rowNo} / ลำดับ {existingProduct.index}
-                            </Text>
-                        </View>
-                    )}
-                    {renderActionOptions()}
-                </View>
-
-                {/* Target Position Section */}
-                {(action === 'add' || action === 'move') && (
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>
-                            {action === 'add' ? 'ตำแหน่งที่ต้องการเพิ่ม' : 'ตำแหน่งปลายทาง'}
-                        </Text>
-
-                        {shelvesLoading ? (
-                            <View style={styles.loadingBox}>
-                                <ActivityIndicator size="small" color="#10b981" />
-                                <Text style={styles.loadingText}>กำลังโหลดข้อมูลชั้นวาง...</Text>
-                            </View>
-                        ) : (
-                            <>
-                                <CustomPicker
-                                    label="ชั้นวาง (Shelf)"
-                                    value={toShelf}
-                                    options={shelfOptions}
-                                    onChange={setToShelf}
-                                    placeholder="-- เลือกชั้นวาง --"
-                                />
-                                <CustomPicker
-                                    label="ชั้นที่ (Row)"
-                                    value={toRow}
-                                    options={rowOptions}
-                                    onChange={setToRow}
-                                    placeholder="-- เลือกชั้น --"
-                                    disabled={rowOptions.length === 0}
-                                />
-                                <CustomPicker
-                                    label="ลำดับ (Index)"
-                                    value={toIndex}
-                                    options={indexOptions}
-                                    onChange={setToIndex}
-                                    placeholder="-- เลือกลำดับ --"
-                                    disabled={indexOptions.length === 0}
-                                />
-                                {toShelf && toRow && toIndex && (
-                                    <View style={styles.positionInfoBox}>
-                                        <Text style={styles.positionInfoText}>
-                                            📍 ตำแหน่งที่เลือก: {toShelf} / ชั้น {toRow} / ลำดับ {toIndex}
-                                        </Text>
+                            {shelvesLoading ? (
+                                <View style={styles.loadingBox}>
+                                    <ActivityIndicator size="small" color="#10b981" />
+                                    <Text style={styles.loadingText}>โหลดข้อมูลชั้นวาง...</Text>
+                                </View>
+                            ) : (
+                                <>
+                                    <CustomPicker
+                                        label="ชั้นวาง (Shelf)"
+                                        value={toShelf}
+                                        options={shelfOptions}
+                                        onChange={setToShelf}
+                                        placeholder="เลือกชั้นวาง"
+                                        icon={MapPin}
+                                    />
+                                    <View style={styles.rowColContainer}>
+                                        <View style={{ flex: 1 }}>
+                                            <CustomPicker
+                                                label="ชั้นที่ (Row)"
+                                                value={toRow}
+                                                options={rowOptions}
+                                                onChange={setToRow}
+                                                placeholder="เลือกชั้น"
+                                                disabled={!toShelf}
+                                            />
+                                        </View>
+                                        <View style={{ width: 12 }} />
+                                        <View style={{ flex: 1 }}>
+                                            <CustomPicker
+                                                label="ลำดับ (No.)"
+                                                value={toIndex}
+                                                options={indexOptions}
+                                                onChange={setToIndex}
+                                                placeholder="เลือกลำดับ"
+                                                disabled={!toRow}
+                                            />
+                                        </View>
                                     </View>
-                                )}
-                            </>
-                        )}
-                    </View>
-                )}
-
-                {/* Note Section */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>หมายเหตุ (ถ้ามี)</Text>
-                    <TextInput
-                        style={[styles.input, styles.textArea]}
-                        value={note}
-                        onChangeText={setNote}
-                        placeholder="ระบุเหตุผลหรือรายละเอียดเพิ่มเติม..."
-                        placeholderTextColor="#94a3b8"
-                        multiline
-                        numberOfLines={3}
-                    />
-                </View>
-
-                {/* Error Display */}
-                {error ? (
-                    <View style={styles.errorBox}>
-                        <Text style={styles.errorText}>⚠️ {error}</Text>
-                    </View>
-                ) : null}
-
-                {/* Submit Button */}
-                <TouchableOpacity
-                    style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-                    onPress={handleSubmit}
-                    disabled={loading}
-                >
-                    {loading ? (
-                        <ActivityIndicator color="#fff" />
-                    ) : (
-                        <Text style={styles.submitButtonText}>ส่งคำขอ</Text>
+                                </>
+                            )}
+                        </View>
                     )}
-                </TouchableOpacity>
-            </ScrollView>
-        </View>
+
+                    {/* Note */}
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>หมายเหตุ</Text>
+                        <TextInput
+                            style={[styles.inputArea, styles.inputContainer]}
+                            value={note}
+                            onChangeText={setNote}
+                            placeholder="ระบุเหตุผลหรือรายละเอียดเพิ่มเติม..."
+                            placeholderTextColor="#94a3b8"
+                            multiline
+                            numberOfLines={3}
+                            textAlignVertical="top"
+                        />
+                    </View>
+
+                    {/* Error */}
+                    {error ? (
+                        <View style={styles.errorBox}>
+                            <Text style={styles.errorText}>⚠️ {error}</Text>
+                        </View>
+                    ) : null}
+
+                    {/* Submit Button */}
+                    <TouchableOpacity
+                        style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+                        onPress={handleSubmit}
+                        disabled={loading}
+                    >
+                        {loading ? (
+                            <ActivityIndicator color="#fff" />
+                        ) : (
+                            <Text style={styles.submitButtonText}>ส่งคำขอ</Text>
+                        )}
+                    </TouchableOpacity>
+
+                    <View style={{ height: 40 }} />
+                </ScrollView>
+            </KeyboardAvoidingView>
+
+            {/* Success Modal */}
+            <Modal visible={success} transparent animationType="fade">
+                <View style={styles.successOverlay}>
+                    <View style={styles.successCard}>
+                        <View style={styles.successIconCircle}>
+                            <Check size={40} color="#fff" />
+                        </View>
+                        <Text style={styles.successTitle}>ส่งคำขอสำเร็จ!</Text>
+                        <Text style={styles.successMessage}>
+                            คำขอของคุณถูกส่งไปยังส่วนกลางแล้ว{"\n"}กรุณารอการตรวจสอบ
+                        </Text>
+                        <TouchableOpacity style={styles.successButton} onPress={handleCloseSuccess}>
+                            <Text style={styles.successButtonText}>ตกลง</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+        </SafeAreaView>
     );
 }
 
-// =============================================================================
-// STYLES
-// =============================================================================
-
 const styles = StyleSheet.create({
-    // Layout
     container: {
         flex: 1,
-        backgroundColor: '#f0fdf4',
-        paddingTop: 24,
-        paddingBottom: 16,
+        backgroundColor: '#f8fafc',
     },
-    content: {
-        flex: 1,
-    },
-    contentContainer: {
-        padding: 16,
-    },
-
-    // Header
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -550,10 +542,13 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         backgroundColor: '#fff',
         borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
+        borderBottomColor: '#f1f5f9',
     },
     backButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
         paddingRight: 12,
+        gap: 4,
     },
     backButtonText: {
         fontSize: 16,
@@ -564,7 +559,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     title: {
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: '600',
         color: '#1e293b',
     },
@@ -572,164 +567,247 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#64748b',
     },
+    content: {
+        flex: 1,
+    },
+    contentContainer: {
+        padding: 16,
+    },
 
     // Sections
     section: {
         backgroundColor: '#fff',
-        borderRadius: 10,
-        padding: 12,
-        marginBottom: 10,
-        ...Platform.select({
-            web: { boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)' },
-            default: { elevation: 2 },
-        }),
+        padding: 16,
+        borderRadius: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
     },
     sectionTitle: {
         fontSize: 15,
         fontWeight: '600',
-        color: '#374151',
-        marginBottom: 12,
+        color: '#1e293b',
+        marginBottom: 16,
     },
 
-    // Form Elements
-    inputGroup: {
+    // Action Grid
+    actionGrid: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        gap: 12,
+    },
+    actionCard: {
+        flex: 1,
+        backgroundColor: '#f8fafc',
+        borderRadius: 12,
+        padding: 12,
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#e2e8f0',
+    },
+
+    // Compact Action Buttons
+    compactActionContainer: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    compactActionBtn: {
+        flex: 1,
+        flexDirection: 'column', // Changed to column
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 4,
+        backgroundColor: '#f8fafc',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        borderRadius: 10,
+        gap: 6,
+        minHeight: 80, // Ensure good touch target
+    },
+    compactActionDisabled: {
+        backgroundColor: '#f1f5f9',
+        borderColor: '#f1f5f9',
+        opacity: 0.6,
+    },
+    compactActionText: {
+        fontSize: 12, // Slightly smaller
+        fontWeight: '600', // Bolder
+        color: '#64748b',
+        textAlign: 'center', // Center text
+        flexWrap: 'wrap', // Allow wrapping
+    },
+    compactIconWrapper: {
+        width: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 10,
+    },
+    actionCardActive: {
+        backgroundColor: '#fff',
+    },
+    actionCardDisabled: {
+        opacity: 0.5,
+        backgroundColor: '#f1f5f9',
+    },
+    actionIconCircle: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        justifyContent: 'center',
+        alignItems: 'center',
         marginBottom: 8,
+    },
+    actionLabel: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: '#64748b',
+    },
+
+    // Inputs
+    inputGroup: {
+        marginBottom: 16,
     },
     label: {
         fontSize: 13,
         color: '#64748b',
         marginBottom: 6,
+        fontWeight: '500',
     },
-    input: {
+    inputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
         backgroundColor: '#f8fafc',
         borderWidth: 1,
         borderColor: '#e2e8f0',
-        borderRadius: 8,
+        borderRadius: 12,
         paddingHorizontal: 12,
+    },
+    inputDisabled: {
+        backgroundColor: '#f1f5f9',
+        borderColor: '#e2e8f0',
+    },
+    inputIcon: {
+        marginRight: 8,
+    },
+    input: {
+        flex: 1,
+        paddingVertical: 12,
+        fontSize: 15,
+        color: '#1e293b',
+    },
+    inputArea: {
+        minHeight: 100,
+        paddingTop: 12,
+    },
+
+    // Compact Mode Styles
+    compactInputContainer: {
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        borderRadius: 12,
+        overflow: 'hidden',
+    },
+    compactInputRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+    },
+    compactInputIcon: {
+        marginRight: 10,
+    },
+    compactInput: {
+        flex: 1,
         paddingVertical: 10,
         fontSize: 14,
         color: '#1e293b',
     },
-    textArea: {
-        minHeight: 80,
-        textAlignVertical: 'top',
-    },
-    readOnlyBox: {
-        backgroundColor: '#e2e8f0',
-        borderWidth: 1,
-        borderColor: '#cbd5e1',
-        borderRadius: 10,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-    },
-    readOnlyText: {
-        fontSize: 15,
-        color: '#475569',
-        fontWeight: '500',
-    },
-
-    // Lookup Result
-    lookupResult: {
-        marginTop: 8,
-        padding: 10,
-        borderRadius: 8,
-    },
-    lookupResultFound: {
-        backgroundColor: '#d1fae5',
-    },
-    lookupResultNotFound: {
-        backgroundColor: '#fee2e2',
-    },
-    lookupResultFoundText: {
-        fontSize: 12,
-        color: '#059669',
-        fontWeight: '500',
-    },
-    lookupResultNotFoundText: {
-        fontSize: 12,
-        color: '#dc2626',
-        fontWeight: '500',
-    },
-
-    // Position Boxes
-    currentPositionBox: {
-        backgroundColor: '#f0f9ff',
-        padding: 12,
-        borderRadius: 8,
+    compactStatus: {
         flexDirection: 'row',
         alignItems: 'center',
+        marginTop: 6,
+        paddingVertical: 4,
+        paddingHorizontal: 8,
+        borderRadius: 6,
+        alignSelf: 'flex-start',
     },
-    currentPositionLabel: {
-        fontSize: 13,
-        color: '#64748b',
+    compactLocationBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#eff6ff',
+        borderRadius: 8,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        marginTop: 8,
     },
-    currentPositionText: {
+    compactLocationLabel: {
         fontSize: 13,
         fontWeight: '600',
         color: '#0369a1',
-        marginLeft: 8,
+        marginRight: 6,
     },
-    existingLocationBox: {
-        backgroundColor: '#dbeafe',
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 12,
-    },
-    existingLocationText: {
+    compactLocationText: {
         fontSize: 13,
         color: '#1e40af',
+        flex: 1,
+    },
+
+    // Status Badge
+    statusBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 8,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 8,
+        alignSelf: 'flex-start',
+        borderWidth: 1,
+    },
+    badgeSuccess: {
+        backgroundColor: '#f0fdf4',
+        borderColor: '#dcfce7',
+    },
+    badgeError: {
+        backgroundColor: '#fef2f2',
+        borderColor: '#fee2e2',
+    },
+    statusBadgeText: {
+        fontSize: 12,
+        marginLeft: 6,
         fontWeight: '500',
     },
-    positionInfoBox: {
-        backgroundColor: '#dbeafe',
+    textSuccess: { color: '#166534' },
+    textError: { color: '#991b1b' },
+
+    // Current Location Box
+    currentLocationBox: {
+        backgroundColor: '#eff6ff',
+        borderWidth: 1,
+        borderColor: '#bfdbfe',
+        borderRadius: 12,
         padding: 12,
-        borderRadius: 8,
         marginTop: 8,
     },
-    positionInfoText: {
-        fontSize: 13,
-        color: '#1e40af',
-        fontWeight: '500',
-    },
-
-    // Action Options
-    actionOptionsRow: {
+    currentLocationHeader: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        gap: 8,
-    },
-    actionOptionBlock: {
-        flex: 1,
-        borderWidth: 2,
-        borderColor: '#e2e8f0',
-        borderRadius: 8,
-        paddingVertical: 12,
-        paddingHorizontal: 8,
         alignItems: 'center',
-        backgroundColor: '#f8fafc',
+        gap: 6,
+        marginBottom: 6,
     },
-    actionOptionBlockActive: {
-        borderColor: '#10b981',
-        backgroundColor: '#ecfdf5',
-    },
-    actionOptionBlockDisabled: {
-        opacity: 0.4,
-        backgroundColor: '#f1f5f9',
-    },
-    actionBlockLabel: {
-        fontSize: 12,
+    currentLocationTitle: {
+        fontSize: 13,
         fontWeight: '600',
-        color: '#374151',
-        textAlign: 'center',
+        color: '#0369a1',
     },
-    actionBlockLabelActive: {
-        color: '#059669',
-    },
-    actionBlockLabelDisabled: {
-        color: '#9ca3af',
+    currentLocationText: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#1e40af',
+        marginLeft: 22,
     },
 
-    // Custom Picker
+    // Pickers
     pickerWrapper: {
         marginBottom: 12,
     },
@@ -740,12 +818,20 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8fafc',
         borderWidth: 1,
         borderColor: '#e2e8f0',
-        borderRadius: 10,
-        paddingHorizontal: 14,
-        paddingVertical: 14,
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 12,
     },
     pickerButtonDisabled: {
-        opacity: 0.5,
+        opacity: 0.6,
+        backgroundColor: '#f1f5f9',
+    },
+    pickerBtnContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    pickerIcon: {
+        marginRight: 8,
     },
     pickerButtonText: {
         fontSize: 15,
@@ -754,25 +840,17 @@ const styles = StyleSheet.create({
     pickerPlaceholder: {
         color: '#94a3b8',
     },
-    pickerArrow: {
-        fontSize: 12,
-        color: '#94a3b8',
-    },
-
-    // Picker Modal
     pickerModalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
     },
     pickerModalContent: {
         backgroundColor: '#fff',
-        borderRadius: 16,
-        width: '100%',
-        maxWidth: 400,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
         maxHeight: '70%',
+        paddingBottom: 24,
     },
     pickerModalHeader: {
         flexDirection: 'row',
@@ -780,131 +858,148 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: 16,
         borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
+        borderBottomColor: '#f1f5f9',
     },
     pickerModalTitle: {
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '700',
         color: '#1e293b',
     },
-    pickerModalClose: {
-        fontSize: 18,
-        color: '#64748b',
+    closeBtn: {
         padding: 4,
     },
     pickerOptionList: {
-        maxHeight: 300,
+        padding: 8,
     },
     pickerOptionItem: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingVertical: 14,
-        paddingHorizontal: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f1f5f9',
+        padding: 16,
+        borderRadius: 12,
     },
     pickerOptionItemActive: {
         backgroundColor: '#ecfdf5',
     },
     pickerOptionText: {
         fontSize: 15,
-        color: '#374151',
+        color: '#1e293b',
     },
     pickerOptionTextActive: {
-        color: '#059669',
-        fontWeight: '500',
-    },
-    pickerOptionCheck: {
-        fontSize: 16,
         color: '#10b981',
+        fontWeight: '600',
+    },
+    rowColContainer: {
+        flexDirection: 'row',
+    },
+
+    // Submit
+    submitButton: {
+        backgroundColor: '#10b981',
+        borderRadius: 14,
+        paddingVertical: 16,
+        alignItems: 'center',
+        marginTop: 8,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#10b981',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.2,
+                shadowRadius: 8,
+            },
+            android: {
+                elevation: 4,
+            },
+        }),
+    },
+    submitButtonDisabled: {
+        backgroundColor: '#94a3b8',
+        shadowOpacity: 0,
+        elevation: 0,
+    },
+    submitButtonText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#fff',
+    },
+
+    // Error
+    errorBox: {
+        backgroundColor: '#fef2f2',
+        borderWidth: 1,
+        borderColor: '#fee2e2',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 16,
+    },
+    errorText: {
+        color: '#b91c1c',
+        fontSize: 13,
+        textAlign: 'center',
     },
 
     // Loading
     loadingBox: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
         padding: 16,
-        backgroundColor: '#f8fafc',
-        borderRadius: 8,
+        gap: 8,
     },
     loadingText: {
-        marginLeft: 10,
-        fontSize: 14,
         color: '#64748b',
-    },
-
-    // Error
-    errorBox: {
-        backgroundColor: '#fef2f2',
-        padding: 14,
-        borderRadius: 10,
-        marginBottom: 16,
-    },
-    errorText: {
         fontSize: 14,
-        color: '#dc2626',
-    },
-
-    // Submit Button
-    submitButton: {
-        backgroundColor: '#f59e0b',
-        borderRadius: 12,
-        paddingVertical: 16,
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    submitButtonDisabled: {
-        opacity: 0.6,
-    },
-    submitButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#fff',
     },
 
     // Success Modal
     successOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0,0,0,0.6)',
         justifyContent: 'center',
         alignItems: 'center',
-    },
-    successPopup: {
-        backgroundColor: '#fff',
-        borderRadius: 16,
         padding: 24,
+    },
+    successCard: {
+        backgroundColor: '#fff',
+        borderRadius: 24,
+        padding: 32,
         alignItems: 'center',
-        minWidth: 250,
-        ...Platform.select({
-            web: { boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' },
-            default: { elevation: 8 },
-        }),
+        width: '100%',
+        maxWidth: 320,
     },
-    successPopupIcon: {
-        fontSize: 48,
-        marginBottom: 12,
-    },
-    successPopupTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#10b981',
-        marginBottom: 4,
-    },
-    successPopupText: {
-        fontSize: 14,
-        color: '#64748b',
+    successIconCircle: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: '#10b981',
+        justifyContent: 'center',
+        alignItems: 'center',
         marginBottom: 16,
     },
-    successPopupButton: {
-        backgroundColor: '#10b981',
-        paddingHorizontal: 32,
-        paddingVertical: 10,
-        borderRadius: 8,
+    successTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#1e293b',
+        marginBottom: 8,
     },
-    successPopupButtonText: {
+    successMessage: {
         fontSize: 14,
-        fontWeight: '600',
+        color: '#64748b',
+        textAlign: 'center',
+        lineHeight: 20,
+        marginBottom: 24,
+    },
+    successButton: {
+        backgroundColor: '#10b981',
+        paddingVertical: 12,
+        paddingHorizontal: 32,
+        borderRadius: 12,
+        width: '100%',
+        alignItems: 'center',
+    },
+    successButtonText: {
         color: '#fff',
+        fontSize: 15,
+        fontWeight: '600',
     },
 });

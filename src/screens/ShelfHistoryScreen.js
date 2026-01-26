@@ -3,14 +3,7 @@
  * Displays list of shelf changes made by admin with acknowledgment options
  */
 
-// =============================================================================
-// IMPORTS
-// =============================================================================
-
-// React
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-
-// React Native
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
     View,
     Text,
@@ -22,8 +15,12 @@ import {
     Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+    ChevronLeft, CheckCircle2, AlertCircle,
+    Plus, Trash2, ArrowRightLeft, Package,
+    Clock, Check
+} from 'lucide-react-native';
 
-// Local imports
 import useAuthStore from '../store/authStore';
 import useShelfUpdateStore from '../store/shelfUpdateStore';
 import { BRANCHES } from '../constants/branches';
@@ -32,30 +29,17 @@ import { BRANCHES } from '../constants/branches';
 // CONSTANTS
 // =============================================================================
 
-/** Action type labels */
 const ACTION_MAP = {
-    add: { emoji: '➕', label: 'เพิ่ม', bgColor: '#dbeafe', textColor: '#1e40af' },
-    delete: { emoji: '🗑️', label: 'ลบ', bgColor: '#fee2e2', textColor: '#991b1b' },
-    move: { emoji: '↔️', label: 'ย้าย', bgColor: '#fef3c7', textColor: '#92400e' },
+    add: { icon: Plus, label: 'นำสินค้าเข้า', color: '#10b981', bg: '#ecfdf5' },
+    delete: { icon: Trash2, label: 'นำสินค้าออก', color: '#ef4444', bg: '#fef2f2' },
+    move: { icon: ArrowRightLeft, label: 'เปลี่ยนตำแหน่งสินค้า', color: '#3b82f6', bg: '#eff6ff' },
 };
 
-// =============================================================================
-// HELPER FUNCTIONS
-// =============================================================================
-
-/**
- * Format date string for Thai locale display
- * @param {string} dateStr - ISO date string
- * @returns {string} Formatted date string
- */
 const formatDate = (dateStr) => {
     if (!dateStr) return '-';
     const d = new Date(dateStr);
     return d.toLocaleDateString('th-TH', {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
+        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
     });
 };
 
@@ -64,62 +48,83 @@ const formatDate = (dateStr) => {
 // =============================================================================
 
 export default function ShelfHistoryScreen({ navigation }) {
-    // -------------------------------------------------------------------------
-    // State & Store
-    // -------------------------------------------------------------------------
     const user = useAuthStore((s) => s.user);
     const storecode = user?.storecode || user?.name;
 
-    // Shelf update store
     const changeLogs = useShelfUpdateStore((s) => s.changeLogs);
     const unacknowledgedCount = useShelfUpdateStore((s) => s.unacknowledgedCount);
     const fetchAllHistory = useShelfUpdateStore((s) => s.fetchAllHistory);
-    const fetchChangeLogs = useShelfUpdateStore((s) => s.fetchChangeLogs);
     const acknowledgeOne = useShelfUpdateStore((s) => s.acknowledgeOne);
     const acknowledgeAll = useShelfUpdateStore((s) => s.acknowledgeAll);
 
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [ackingId, setAckingId] = useState(null);
+    const [page, setPage] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
+    const hasMoreRef = useRef(true);
 
-    // -------------------------------------------------------------------------
-    // Derived Values
-    // -------------------------------------------------------------------------
     const branchName = useMemo(() => {
         if (!storecode) return 'ผู้ใช้';
         const branch = BRANCHES.find((b) => b.code === storecode);
         return branch ? branch.label.replace(`${storecode} - `, '') : storecode;
     }, [storecode]);
 
-    // -------------------------------------------------------------------------
-    // Data Loading
-    // -------------------------------------------------------------------------
-    const loadData = useCallback(async (isRefresh = false) => {
+    const loadData = useCallback(async (isRefresh = false, isLoadMore = false) => {
         if (!storecode) return;
+        if (!hasMoreRef.current && isLoadMore) return;
+        if (loadingMore) return;
 
-        if (isRefresh) setRefreshing(true);
-        else setLoading(true);
+        const targetPage = isRefresh ? 1 : (isLoadMore ? page + 1 : 1);
+        const limit = 20;
+
+        if (isRefresh) {
+            setRefreshing(true);
+            setHasMore(true);
+            hasMoreRef.current = true;
+        } else if (isLoadMore) {
+            setLoadingMore(true);
+        } else {
+            setLoading(true);
+        }
 
         try {
-            await fetchAllHistory(storecode);
+            const result = await fetchAllHistory(storecode, targetPage, limit, isLoadMore);
+            const { logs: newLogs, total } = result;
+
+            setTotalCount(total);
+            if (!isLoadMore) setPage(1);
+            else setPage(targetPage);
+
+            // Check if all data loaded
+            const currentTotal = isLoadMore ? changeLogs.length + newLogs.length : newLogs.length;
+            if (currentTotal >= total || newLogs.length < limit) {
+                setHasMore(false);
+                hasMoreRef.current = false;
+            } else {
+                setHasMore(true);
+                hasMoreRef.current = true;
+            }
         } catch (err) {
             console.error('Load shelf history error:', err);
         } finally {
             setLoading(false);
             setRefreshing(false);
+            setLoadingMore(false);
         }
-    }, [storecode, fetchAllHistory]);
+    }, [storecode, fetchAllHistory, page, changeLogs.length, loadingMore]);
 
-    // Initial load
     useEffect(() => {
         loadData();
     }, [loadData]);
 
-    // -------------------------------------------------------------------------
-    // Event Handlers
-    // -------------------------------------------------------------------------
     const handleAcknowledgeOne = async (logId) => {
         if (logId && storecode) {
+            setAckingId(logId);
             await acknowledgeOne(logId, storecode);
+            setAckingId(null);
         }
     };
 
@@ -129,123 +134,132 @@ export default function ShelfHistoryScreen({ navigation }) {
         }
     };
 
-    // -------------------------------------------------------------------------
-    // Render Functions
-    // -------------------------------------------------------------------------
-    const renderLogItem = ({ item }) => {
-        const actionConfig = ACTION_MAP[item.action] || ACTION_MAP.move;
+    const renderLogItem = ({ item, index }) => {
+        const actionConf = ACTION_MAP[item.action] || ACTION_MAP.move;
+        const ActionIcon = actionConf.icon;
+
+        // Timeline connector
+        const isLastItem = index === changeLogs.length - 1;
 
         return (
-            <View style={[styles.card, item.acknowledged && styles.cardAcked]}>
-                {/* Header Row */}
-                <View style={styles.cardHeader}>
-                    <View style={[styles.actionBadge, { backgroundColor: actionConfig.bgColor }]}>
-                        <Text style={styles.actionEmoji}>{actionConfig.emoji}</Text>
-                        <Text style={[styles.actionLabel, { color: actionConfig.textColor }]}>
-                            {actionConfig.label}
+            <View style={styles.timelineItem}>
+                {/* Timeline Line */}
+                <View style={styles.timelineLeft}>
+                    <View style={[styles.timelineDot, item.acknowledged ? styles.dotAck : styles.dotPending]}>
+                        <ActionIcon size={12} color="#fff" />
+                    </View>
+                    {!isLastItem && <View style={styles.timelineLine} />}
+                </View>
+
+                {/* Content Card */}
+                <View style={[styles.card, item.acknowledged && styles.cardAcked]}>
+                    <View style={styles.cardHeader}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Text style={{ fontSize: 12, fontWeight: '700', color: '#64748b' }}>#{index + 1}</Text>
+                            <View style={[styles.actionBadge, { backgroundColor: actionConf.bg }]}>
+                                <Text style={[styles.actionText, { color: actionConf.color }]}>
+                                    {actionConf.label}
+                                </Text>
+                            </View>
+                        </View>
+                        <Text style={styles.shelfCode}>{item.shelfCode}</Text>
+                    </View>
+
+                    <View style={styles.productRow}>
+                        <Package size={16} color="#64748b" style={{ marginTop: 2 }} />
+                        <Text style={styles.productName}>
+                            {item.productName || `รหัส ${item.codeProduct}`}
                         </Text>
                     </View>
-                    <Text style={styles.shelfCode}>{item.shelfCode}</Text>
-                </View>
 
-                {/* Product Info */}
-                <View style={styles.productRow}>
-                    <Text style={styles.productLabel}>สินค้า:</Text>
-                    <Text style={styles.productName}>
-                        {item.productName || `รหัส ${item.codeProduct}`}
-                    </Text>
-                </View>
+                    <View style={styles.descBox}>
+                        <View style={styles.descRow}>
+                            {item.action === 'add' ? (
+                                <Text style={styles.descText}>
+                                    เพิ่มที่ <Text style={styles.highlight}>ชั้น {item.toRow} ลำดับ {item.toIndex}</Text>
+                                </Text>
+                            ) : item.action === 'delete' ? (
+                                <Text style={styles.descText}>
+                                    ลบจาก <Text style={styles.highlight}>ชั้น {item.fromRow} ลำดับ {item.fromIndex}</Text>
+                                </Text>
+                            ) : (
+                                <Text style={styles.descText}>
+                                    จาก <Text style={styles.highlight}>ชั้น {item.fromRow} ({item.fromIndex})</Text>
+                                    {' '}ไป{' '}
+                                    <Text style={styles.highlight}>ชั้น {item.toRow} ({item.toIndex})</Text>
+                                </Text>
+                            )}
+                        </View>
+                    </View>
 
-                {/* Position Info */}
-                <View style={styles.positionRow}>
-                    {item.action === 'add' ? (
-                        <>
-                            <Text style={styles.positionLabel}>ตำแหน่งใหม่:</Text>
-                            <Text style={styles.positionValue}>
-                                {item.shelfCode} ชั้น {item.toRow} ลำดับ {item.toIndex}
-                            </Text>
-                        </>
-                    ) : item.action === 'delete' ? (
-                        <>
-                            <Text style={styles.positionLabel}>ตำแหน่งเดิม:</Text>
-                            <Text style={styles.positionValue}>
-                                {item.shelfCode} ชั้น {item.fromRow} ลำดับ {item.fromIndex}
-                            </Text>
-                        </>
-                    ) : (
-                        <>
-                            <Text style={styles.positionLabel}>ย้ายจาก:</Text>
-                            <Text style={styles.positionValue}>
-                                {item.shelfCode} ชั้น {item.fromRow} ลำดับ {item.fromIndex} → ชั้น {item.toRow} ลำดับ {item.toIndex}
-                            </Text>
-                        </>
-                    )}
-                </View>
+                    <View style={styles.cardFooter}>
+                        <View style={styles.timeInfo}>
+                            <Clock size={12} color="#94a3b8" />
+                            <Text style={styles.timeText}>{formatDate(item.createdAt)}</Text>
+                        </View>
 
-                {/* Footer Row */}
-                <View style={styles.cardFooter}>
-                    <View style={styles.dateInfo}>
-                        <Text style={styles.dateLabel}>
-                            {formatDate(item.createdAt)}
-                        </Text>
-                        {item.createdBy && (
-                            <Text style={styles.createdBy}>โดยจัดซื้อ</Text>
+                        {item.acknowledged ? (
+                            <View style={styles.ackedBadge}>
+                                <Check size={12} color="#059669" />
+                                <Text style={styles.ackedText}>รับทราบแล้ว</Text>
+                            </View>
+                        ) : (
+                            <TouchableOpacity
+                                style={styles.ackButton}
+                                onPress={() => handleAcknowledgeOne(item.id)}
+                                disabled={ackingId === item.id}
+                            >
+                                {ackingId === item.id ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.ackButtonText}>กดรับทราบ</Text>
+                                )}
+                            </TouchableOpacity>
                         )}
                     </View>
-
-                    {item.acknowledged ? (
-                        <View style={styles.ackedBadge}>
-                            <Text style={styles.ackedText}>✓ รับทราบแล้ว</Text>
-                        </View>
-                    ) : (
-                        <TouchableOpacity
-                            style={styles.ackButton}
-                            onPress={() => handleAcknowledgeOne(item.id)}
-                        >
-                            <Text style={styles.ackButtonText}>รับทราบ</Text>
-                        </TouchableOpacity>
-                    )}
                 </View>
             </View>
         );
     };
 
-    const renderEmptyList = () => (
-        <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📦</Text>
-            <Text style={styles.emptyText}>ยังไม่มีประวัติการปรับเปลี่ยน</Text>
-        </View>
-    );
-
-    // -------------------------------------------------------------------------
-    // Render
-    // -------------------------------------------------------------------------
     return (
-        <SafeAreaView style={styles.container}>
-            {/* Header */}
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-                    <Text style={styles.backButtonText}>‹ กลับ</Text>
+                    <ChevronLeft size={24} color="#10b981" />
+                    <Text style={styles.backButtonText}>กลับ</Text>
                 </TouchableOpacity>
                 <View style={styles.headerInfo}>
-                    <Text style={styles.title}>ประวัติการปรับโดยจัดซื้อ</Text>
+                    <Text style={styles.title}>ประวัติการปรับ Planogram</Text>
                     <Text style={styles.subtitle}>
-                        {branchName} - {changeLogs.length} รายการ
-                        {unacknowledgedCount > 0 && ` (${unacknowledgedCount} รอรับทราบ)`}
+                        {branchName} ({changeLogs.length})
                     </Text>
                 </View>
             </View>
 
-            {/* Acknowledge All Button */}
-            {unacknowledgedCount > 0 && (
-                <TouchableOpacity style={styles.ackAllButton} onPress={handleAcknowledgeAll}>
-                    <Text style={styles.ackAllButtonText}>
-                        ✓ รับทราบทั้งหมด ({unacknowledgedCount} รายการ)
-                    </Text>
-                </TouchableOpacity>
+            {unacknowledgedCount > 0 ? (
+                <View style={styles.alertBanner}>
+                    <View style={styles.alertContent}>
+                        <AlertCircle size={20} color="#b45309" />
+                        <Text style={styles.alertText}>
+                            คุณมีรายการที่ยังไม่ได้รับทราบ {unacknowledgedCount} รายการ
+                        </Text>
+                    </View>
+                    <TouchableOpacity style={styles.ackAllButton} onPress={handleAcknowledgeAll}>
+                        <Text style={styles.ackAllButtonText}>รับทราบทั้งหมด</Text>
+                    </TouchableOpacity>
+                </View>
+            ) : (
+                <View style={[styles.alertBanner, { backgroundColor: '#f0fdf4', borderColor: '#dcfce7' }]}>
+                    <View style={styles.alertContent}>
+                        <CheckCircle2 size={20} color="#166534" />
+                        <Text style={[styles.alertText, { color: '#166534' }]}>
+                            รับทราบการเปลี่ยนแปลงครบถ้วนแล้ว
+                        </Text>
+                    </View>
+                </View>
             )}
 
-            {/* Content */}
             {loading ? (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#10b981" />
@@ -265,25 +279,42 @@ export default function ShelfHistoryScreen({ navigation }) {
                             tintColor="#10b981"
                         />
                     }
-                    ListEmptyComponent={renderEmptyList}
+                    onEndReached={() => {
+                        if (hasMoreRef.current && !loading && !loadingMore) {
+                            loadData(false, true);
+                        }
+                    }}
+                    onEndReachedThreshold={0.1}
+                    ListFooterComponent={
+                        loadingMore ? (
+                            <View style={{ paddingVertical: 20 }}>
+                                <ActivityIndicator size="small" color="#94a3b8" />
+                            </View>
+                        ) : (
+                            !hasMore && changeLogs.length > 0 ? (
+                                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                                    <Text style={{ color: '#94a3b8', fontSize: 12 }}>--- ครบถ้วน ---</Text>
+                                </View>
+                            ) : null
+                        )
+                    }
+                    ListEmptyComponent={
+                        <View style={styles.emptyContainer}>
+                            <CheckCircle2 size={48} color="#cbd5e1" />
+                            <Text style={styles.emptyText}>ไม่มีประวัติการเปลี่ยนแปลง</Text>
+                        </View>
+                    }
                 />
             )}
         </SafeAreaView>
     );
 }
 
-// =============================================================================
-// STYLES
-// =============================================================================
-
 const styles = StyleSheet.create({
-    // Layout
     container: {
         flex: 1,
         backgroundColor: '#f8fafc',
     },
-
-    // Header
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -291,22 +322,13 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         backgroundColor: '#fff',
         borderBottomWidth: 1,
-        borderBottomColor: '#e2e8f0',
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.05,
-                shadowRadius: 2,
-            },
-            android: {
-                elevation: 2,
-            },
-        }),
+        borderBottomColor: '#f1f5f9',
     },
     backButton: {
-        paddingVertical: 4,
+        flexDirection: 'row',
+        alignItems: 'center',
         paddingRight: 12,
+        gap: 4,
     },
     backButtonText: {
         fontSize: 16,
@@ -317,63 +339,97 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     title: {
-        fontSize: 18,
-        fontWeight: '700',
+        fontSize: 17,
+        fontWeight: '600',
         color: '#1e293b',
     },
     subtitle: {
-        fontSize: 13,
+        fontSize: 12,
         color: '#64748b',
-        marginTop: 2,
     },
 
-    // Acknowledge All Button
+    // Alert Banner
+    alertBanner: {
+        backgroundColor: '#fffbeb',
+        padding: 12,
+        margin: 16,
+        marginBottom: 8,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#fcd34d',
+        gap: 12,
+    },
+    alertContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    alertText: {
+        fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+        fontSize: 13,
+        color: '#92400e',
+        flex: 1,
+    },
     ackAllButton: {
-        backgroundColor: '#10b981',
-        marginHorizontal: 16,
-        marginTop: 12,
-        paddingVertical: 12,
-        borderRadius: 10,
+        backgroundColor: '#f59e0b',
+        paddingVertical: 8,
+        borderRadius: 8,
         alignItems: 'center',
     },
     ackAllButtonText: {
         color: '#fff',
-        fontSize: 15,
         fontWeight: '600',
+        fontSize: 13,
     },
 
-    // Loading
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    loadingText: {
-        fontSize: 14,
-        color: '#64748b',
-        marginTop: 8,
-    },
-
-    // List
+    // List & Timeline
     listContent: {
         padding: 16,
-        paddingBottom: 32,
+    },
+    timelineItem: {
+        flexDirection: 'row',
+        marginBottom: 16,
+    },
+    timelineLeft: {
+        width: 24,
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    timelineDot: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1,
+    },
+    dotPending: {
+        backgroundColor: '#f59e0b',
+    },
+    dotAck: {
+        backgroundColor: '#cbd5e1',
+    },
+    timelineLine: {
+        width: 2,
+        backgroundColor: '#e2e8f0',
+        flex: 1,
+        marginTop: 4,
     },
 
     // Card
     card: {
+        flex: 1,
         backgroundColor: '#fff',
         borderRadius: 12,
-        padding: 16,
-        marginBottom: 12,
+        padding: 12,
         borderWidth: 1,
         borderColor: '#e2e8f0',
         ...Platform.select({
             ios: {
                 shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
+                shadowOffset: { width: 0, height: 2 },
                 shadowOpacity: 0.05,
-                shadowRadius: 3,
+                shadowRadius: 4,
             },
             android: {
                 elevation: 2,
@@ -381,139 +437,130 @@ const styles = StyleSheet.create({
         }),
     },
     cardAcked: {
-        backgroundColor: '#f0fdf4',
-        borderColor: '#bbf7d0',
-        opacity: 0.85,
+        opacity: 0.8,
+        backgroundColor: '#f8fafc',
     },
-
-    // Card Header
     cardHeader: {
         flexDirection: 'row',
-        alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: 10,
+        alignItems: 'center',
+        marginBottom: 8,
     },
     actionBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
         borderRadius: 6,
     },
-    actionEmoji: {
-        fontSize: 14,
-        marginRight: 4,
-    },
-    actionLabel: {
-        fontSize: 13,
+    actionText: {
+        fontSize: 11,
         fontWeight: '600',
     },
     shelfCode: {
-        fontSize: 14,
+        fontSize: 12,
         fontWeight: '600',
         color: '#475569',
         backgroundColor: '#f1f5f9',
-        paddingHorizontal: 8,
-        paddingVertical: 3,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
         borderRadius: 4,
     },
-
-    // Product Info
     productRow: {
         flexDirection: 'row',
-        alignItems: 'flex-start',
-        marginBottom: 6,
-    },
-    productLabel: {
-        fontSize: 13,
-        color: '#64748b',
-        marginRight: 6,
-        marginTop: 2,
+        gap: 8,
+        marginBottom: 8,
     },
     productName: {
-        flex: 1,
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: '500',
         color: '#1e293b',
+        flex: 1,
+        lineHeight: 18,
     },
-
-    // Position Info
-    positionRow: {
+    descBox: {
+        backgroundColor: '#f8fafc',
+        padding: 8,
+        borderRadius: 8,
+        marginBottom: 8,
+    },
+    descRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 10,
     },
-    positionLabel: {
-        fontSize: 13,
+    descText: {
+        fontSize: 12,
         color: '#64748b',
-        marginRight: 6,
     },
-    positionValue: {
-        fontSize: 13,
-        fontWeight: '500',
+    highlight: {
+        fontWeight: '600',
         color: '#334155',
     },
 
     // Card Footer
     cardFooter: {
         flexDirection: 'row',
-        alignItems: 'center',
         justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: 8,
         borderTopWidth: 1,
         borderTopColor: '#f1f5f9',
-        paddingTop: 10,
     },
-    dateInfo: {
-        flex: 1,
+    timeInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
     },
-    dateLabel: {
-        fontSize: 12,
-        color: '#94a3b8',
-    },
-    createdBy: {
+    timeText: {
         fontSize: 11,
         color: '#94a3b8',
     },
 
-    // Acknowledge Button
+    // Buttons
     ackButton: {
         backgroundColor: '#10b981',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 8,
-    },
-    ackButtonText: {
-        color: '#fff',
-        fontSize: 13,
-        fontWeight: '600',
-    },
-
-    // Acknowledged Badge
-    ackedBadge: {
-        backgroundColor: '#d1fae5',
-        paddingHorizontal: 10,
+        paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 6,
     },
-    ackedText: {
-        color: '#065f46',
+    ackButtonText: {
+        color: '#fff',
         fontSize: 12,
+        fontWeight: '600',
+    },
+    ackedBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: '#ecfdf5',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    ackedText: {
+        fontSize: 11,
+        color: '#059669',
         fontWeight: '500',
     },
 
-    // Empty State
+    // Loading & Empty
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingText: {
+        marginTop: 12,
+        fontSize: 14,
+        color: '#64748b',
+    },
     emptyContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        paddingTop: 80,
-    },
-    emptyIcon: {
-        fontSize: 48,
-        marginBottom: 12,
+        paddingVertical: 80,
     },
     emptyText: {
-        fontSize: 15,
+        marginTop: 16,
+        fontSize: 14,
         color: '#64748b',
     },
 });

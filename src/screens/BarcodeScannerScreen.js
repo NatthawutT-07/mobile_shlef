@@ -26,6 +26,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 // Third-party
 import { CameraView, useCameraPermissions } from 'expo-camera';
 
+// Icons
+import {
+    ChevronLeft, Keyboard, AlertTriangle,
+    Search, ScanLine, X, Check, ArrowRightLeft,
+    Trash2, Plus, RefreshCw, MapPin, Tag
+} from 'lucide-react-native';
+
 // Local imports
 import useAuthStore from '../store/authStore';
 import { BRANCHES } from '../constants/branches';
@@ -50,13 +57,13 @@ const SCAN_THROTTLE_MS = 500;
 const SCAN_COOLDOWN_MS = 2000;
 
 /** Scan frame size (must match styles.scanFrame) */
-const SCAN_FRAME_SIZE = 250;
+const SCAN_FRAME_SIZE = 260;
 
 // =============================================================================
 // MAIN COMPONENT
 // =============================================================================
 
-export default function BarcodeScannerScreen({ navigation }) {
+export default function BarcodeScannerScreen({ navigation, route }) {
     // -------------------------------------------------------------------------
     // State & Store
     // -------------------------------------------------------------------------
@@ -90,7 +97,15 @@ export default function BarcodeScannerScreen({ navigation }) {
 
     // -------------------------------------------------------------------------
     // Effects
-    // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------    // Effects
+    useEffect(() => {
+        if (route.params?.success) {
+            resetScanner();
+            // Clear params to avoid loop
+            navigation.setParams({ success: undefined });
+        }
+    }, [route.params?.success, navigation]);
+
     useEffect(() => {
         if (Platform.OS !== 'web' && !permission) {
             requestPermission();
@@ -244,6 +259,7 @@ export default function BarcodeScannerScreen({ navigation }) {
             currentIndex: result.found ? result.index : '',
             defaultAction: action,
             productExists: result.found,
+            source: 'BarcodeScanner',
         };
         navigation.navigate('CreatePogRequest', params);
     };
@@ -267,12 +283,14 @@ export default function BarcodeScannerScreen({ navigation }) {
             <SafeAreaView style={styles.container}>
                 <View style={styles.header}>
                     <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-                        <Text style={styles.backButtonText}>‹ กลับ</Text>
+                        <ChevronLeft color="#10b981" size={24} />
+                        <Text style={styles.backButtonText}>กลับ</Text>
                     </TouchableOpacity>
                     <Text style={styles.title}>สแกนบาร์โค้ด</Text>
+                    <View style={{ width: 40 }} />
                 </View>
                 <View style={styles.centerContent}>
-                    <Text style={styles.errorIcon}>📷</Text>
+                    <AlertTriangle size={48} color="#ef4444" />
                     <Text style={styles.errorTitle}>ไม่ได้รับอนุญาตใช้กล้อง</Text>
                     <Text style={styles.errorText}>กรุณาอนุญาตการใช้กล้องในการตั้งค่า</Text>
                     <TouchableOpacity
@@ -290,21 +308,26 @@ export default function BarcodeScannerScreen({ navigation }) {
     // Render: Main Screen
     // -------------------------------------------------------------------------
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-                    <Text style={styles.backButtonText}>‹ กลับ</Text>
+                    <ChevronLeft color="#1e293b" size={24} />
+                    <Text style={styles.backButtonText}>กลับ</Text>
                 </TouchableOpacity>
                 <View style={styles.headerInfo}>
                     <Text style={styles.title}>สแกนบาร์โค้ด</Text>
-                    <Text style={styles.subtitle}>สาขา: {branchName}</Text>
+                    <Text style={styles.subtitle}>{branchName}</Text>
                 </View>
                 <TouchableOpacity
-                    style={styles.keyboardButton}
+                    style={styles.iconButton}
                     onPress={() => setShowManualInput(!showManualInput)}
                 >
-                    <Text style={styles.keyboardButtonText}>⌨️</Text>
+                    {showManualInput ? (
+                        <ScanLine color="#1e293b" size={24} />
+                    ) : (
+                        <Keyboard color="#1e293b" size={24} />
+                    )}
                 </TouchableOpacity>
             </View>
 
@@ -321,11 +344,11 @@ export default function BarcodeScannerScreen({ navigation }) {
                         autoFocus
                     />
                     <TouchableOpacity
-                        style={styles.searchButton}
+                        style={[styles.searchButton, !manualBarcode.trim() && styles.disabledButton]}
                         onPress={handleManualSearch}
                         disabled={!manualBarcode.trim()}
                     >
-                        <Text style={styles.searchButtonText}>ค้นหา</Text>
+                        {loading ? <ActivityIndicator color="#fff" size="small" /> : <Search color="#fff" size={20} />}
                     </TouchableOpacity>
                 </View>
             )}
@@ -339,105 +362,166 @@ export default function BarcodeScannerScreen({ navigation }) {
                         barcodeScannerSettings={{ barcodeTypes: BARCODE_TYPES }}
                         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
                     />
-                    <View style={styles.overlay}>
-                        <View style={styles.scanFrame}>
-                            <View style={[styles.corner, styles.cornerTopLeft]} />
-                            <View style={[styles.corner, styles.cornerTopRight]} />
-                            <View style={[styles.corner, styles.cornerBottomLeft]} />
-                            <View style={[styles.corner, styles.cornerBottomRight]} />
+                    {/* Dark Overlay with Transparent Cutout */}
+                    <View style={styles.overlayContainer}>
+                        <View style={styles.overlayTop} />
+                        <View style={styles.overlayCenter}>
+                            <View style={styles.overlaySide} />
+                            <View style={styles.scanFrame}>
+                                {/* Corner Markers */}
+                                <View style={[styles.corner, styles.cornerTL]} />
+                                <View style={[styles.corner, styles.cornerTR]} />
+                                <View style={[styles.corner, styles.cornerBL]} />
+                                <View style={[styles.corner, styles.cornerBR]} />
+                                {/* Scanning Ray Animation (Static for now) */}
+                                <View style={styles.scanRay} />
+                            </View>
+                            <View style={styles.overlaySide} />
                         </View>
-                        <Text style={styles.scanHint}>วางบาร์โค้ดในกรอบ</Text>
+                        <View style={styles.overlayBottom}>
+                            <Text style={styles.scanHint}>วางบาร์โค้ดในกรอบเพื่อสแกน</Text>
+                        </View>
                     </View>
                 </View>
             )}
 
-            {/* Loading State */}
-            {loading && (
-                <View style={styles.resultContainer}>
-                    <ActivityIndicator size="large" color="#10b981" />
-                    <Text style={styles.loadingText}>กำลังค้นหา...</Text>
-                </View>
-            )}
-
-            {/* Error State */}
-            {error && (
-                <View style={styles.resultContainer}>
-                    <Text style={styles.errorIcon}>⚠️</Text>
-                    <Text style={styles.errorText}>{error}</Text>
-                    <TouchableOpacity style={styles.retryButton} onPress={resetScanner}>
-                        <Text style={styles.retryButtonText}>ลองใหม่</Text>
-                    </TouchableOpacity>
-                </View>
-            )}
-
-            {/* Result Display */}
-            {result && !loading && (
-                <View style={styles.resultContainer}>
-                    {result.found ? (
-                        <>
-                            <View style={styles.foundBadge}>
-                                <Text style={styles.foundBadgeText}>✓ พบสินค้า</Text>
-                            </View>
-                            <Text style={styles.productName}>{result.productName}</Text>
-                            <Text style={styles.barcodeText}>บาร์โค้ด: {result.barcode}</Text>
-
-                            <View style={styles.locationBox}>
-                                <Text style={styles.locationLabel}>ตำแหน่งใน Planogram</Text>
-                                <Text style={styles.locationValue}>
-                                    {result.shelfCode} / ชั้น {result.rowNo} / ลำดับ {result.index}
-                                </Text>
-                            </View>
-
-                            <View style={styles.detailsRow}>
-                                <View style={styles.detailItem}>
-                                    <Text style={styles.detailLabel}>ราคา</Text>
-                                    <Text style={styles.detailValue}>{result.price || '-'} ฿</Text>
-                                </View>
-                            </View>
-                        </>
-                    ) : (
-                        <>
-                            <View style={[styles.notFoundBadge, result.isMasterFound && { backgroundColor: '#fef3c7' }]}>
-                                <Text style={[styles.notFoundBadgeText, result.isMasterFound && { color: '#b45309' }]}>
-                                    {result.isMasterFound ? '⚠️ ยังไม่ลง Planogram' : '✗ ไม่พบสินค้า'}
-                                </Text>
-                            </View>
-                            {result.productName && <Text style={styles.productName}>{result.productName}</Text>}
-                            <Text style={styles.barcodeText}>บาร์โค้ด: {result.barcode}</Text>
-                            <Text style={styles.reasonText}>{result.reason}</Text>
-                        </>
+            {/* Results & Status Panel */}
+            {(loading || error || result) && (
+                <View style={styles.resultPanel}>
+                    {/* Loading State */}
+                    {loading && (
+                        <View style={styles.statusContent}>
+                            <ActivityIndicator size="large" color="#10b981" style={{ marginBottom: 16 }} />
+                            <Text style={styles.loadingText}>กำลังค้นหาข้อมูล...</Text>
+                        </View>
                     )}
 
-                    {/* Action Buttons */}
-                    <View style={styles.actionsRow}>
-                        <TouchableOpacity style={styles.scanAgainButton} onPress={resetScanner}>
-                            <Text style={styles.scanAgainButtonText}>สแกนใหม่</Text>
-                        </TouchableOpacity>
-
-                        {result.found ? (
-                            <>
-                                <TouchableOpacity
-                                    style={styles.moveButton}
-                                    onPress={() => navigateToRequest('move')}
-                                >
-                                    <Text style={styles.moveButtonText}>↔️ ย้าย</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.deleteButton}
-                                    onPress={() => navigateToRequest('delete')}
-                                >
-                                    <Text style={styles.deleteButtonText}>🗑️ ลบ</Text>
-                                </TouchableOpacity>
-                            </>
-                        ) : result.isMasterFound ? (
-                            <TouchableOpacity
-                                style={styles.addButton}
-                                onPress={() => navigateToRequest('add')}
-                            >
-                                <Text style={styles.addButtonText}>➕ เพิ่มสินค้า</Text>
+                    {/* Error State */}
+                    {!loading && error && (
+                        <View style={styles.statusContent}>
+                            <View style={[styles.iconCircle, { backgroundColor: '#fee2e2' }]}>
+                                <AlertTriangle size={32} color="#dc2626" />
+                            </View>
+                            <Text style={styles.errorTitle}>เกิดข้อผิดพลาด</Text>
+                            <Text style={styles.errorText}>{error}</Text>
+                            <TouchableOpacity style={styles.secondaryButton} onPress={resetScanner}>
+                                <RefreshCw size={18} color="#0f172a" />
+                                <Text style={styles.secondaryButtonText}>ลองใหม่</Text>
                             </TouchableOpacity>
-                        ) : null}
-                    </View>
+                        </View>
+                    )}
+
+                    {/* Result Display */}
+                    {!loading && result && (
+                        <View style={styles.resultContent}>
+                            {/* Header Badge */}
+                            <View style={[
+                                styles.resultHeader,
+                                result.found ? styles.bgFound :
+                                    result.isMasterFound ? styles.bgWarning : styles.bgError
+                            ]}>
+                                {result.found ? (
+                                    <>
+                                        <Check size={20} color="#15803d" />
+                                        <Text style={[styles.resultHeaderText, styles.textFound]}>พบสินค้าใน Planogram</Text>
+                                    </>
+                                ) : result.isMasterFound ? (
+                                    <>
+                                        <AlertTriangle size={20} color="#b45309" />
+                                        <Text style={[styles.resultHeaderText, styles.textWarning]}>ยังไม่ลง Planogram</Text>
+                                    </>
+                                ) : (
+                                    <>
+                                        <X size={20} color="#b91c1c" />
+                                        <Text style={[styles.resultHeaderText, styles.textError]}>ไม่พบสินค้า</Text>
+                                    </>
+                                )}
+                            </View>
+
+                            <View style={styles.productInfo}>
+                                <Text style={styles.productName}>{result.productName || 'ไม่ระบุชื่อสินค้า'}</Text>
+                                <View style={styles.barcodeRow}>
+                                    <ScanLine size={16} color="#64748b" />
+                                    <Text style={styles.barcodeText}>{result.barcode}</Text>
+                                </View>
+                            </View>
+
+                            {/* Location Details (Only if found) */}
+                            {result.found && (
+                                <View style={styles.locationCard}>
+                                    <View style={styles.locationHeader}>
+                                        <MapPin size={16} color="#3b82f6" />
+                                        <Text style={styles.locationTitle}>ตำแหน่งสินค้า</Text>
+                                    </View>
+                                    <View style={styles.locationDetails}>
+                                        <View style={styles.locItem}>
+                                            <Text style={styles.locLabel}>Shelf</Text>
+                                            <Text style={styles.locValue}>{result.shelfCode}</Text>
+                                        </View>
+                                        <View style={styles.verticalDivider} />
+                                        <View style={styles.locItem}>
+                                            <Text style={styles.locLabel}>ชั้นที่</Text>
+                                            <Text style={styles.locValue}>{result.rowNo}</Text>
+                                        </View>
+                                        <View style={styles.verticalDivider} />
+                                        <View style={styles.locItem}>
+                                            <Text style={styles.locLabel}>ลำดับ</Text>
+                                            <Text style={styles.locValue}>{result.index}</Text>
+                                        </View>
+                                    </View>
+                                    <View style={styles.divider} />
+                                    <View style={styles.priceRow}>
+                                        <Tag size={16} color="#64748b" />
+                                        <Text style={styles.priceLabel}>ราคา:</Text>
+                                        <Text style={styles.priceValue}>{result.price || '-'} ฿</Text>
+                                    </View>
+                                </View>
+                            )}
+
+                            {/* Not Found / Reason */}
+                            {!result.found && (
+                                <Text style={styles.reasonText}>{result.reason}</Text>
+                            )}
+
+                            {/* Action Buttons */}
+                            <View style={styles.actionGrid}>
+                                <TouchableOpacity
+                                    style={[styles.actionButton, styles.btnSecondary]}
+                                    onPress={resetScanner}
+                                >
+                                    <RefreshCw size={20} color="#475569" />
+                                    <Text style={styles.btnTextSecondary}>สแกนใหม่</Text>
+                                </TouchableOpacity>
+
+                                {result.found ? (
+                                    <>
+                                        <TouchableOpacity
+                                            style={[styles.actionButton, styles.btnBlue]}
+                                            onPress={() => navigateToRequest('move')}
+                                        >
+                                            <ArrowRightLeft size={20} color="#fff" />
+                                            <Text style={styles.btnTextWhite}>ย้าย</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[styles.actionButton, styles.btnRed]}
+                                            onPress={() => navigateToRequest('delete')}
+                                        >
+                                            <Trash2 size={20} color="#fff" />
+                                            <Text style={styles.btnTextWhite}>ลบออก</Text>
+                                        </TouchableOpacity>
+                                    </>
+                                ) : result.isMasterFound ? (
+                                    <TouchableOpacity
+                                        style={[styles.actionButton, styles.btnGreen, { flex: 2 }]}
+                                        onPress={() => navigateToRequest('add')}
+                                    >
+                                        <Plus size={20} color="#fff" />
+                                        <Text style={styles.btnTextWhite}>เพิ่มสินค้าลง Shelf</Text>
+                                    </TouchableOpacity>
+                                ) : null}
+                            </View>
+                        </View>
+                    )}
                 </View>
             )}
         </SafeAreaView>
@@ -452,15 +536,14 @@ const styles = StyleSheet.create({
     // Layout
     container: {
         flex: 1,
-        backgroundColor: '#1e293b',
-        paddingTop: 24,
-        paddingBottom: 16,
+        backgroundColor: '#fff',
     },
     centerContent: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20,
+        backgroundColor: '#f8fafc',
     },
 
     // Header
@@ -469,291 +552,162 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 16,
         paddingVertical: 12,
-        backgroundColor: '#0f172a',
+        backgroundColor: '#fff',
+        zIndex: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: '#e2e8f0',
     },
     backButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
         paddingRight: 12,
     },
     backButtonText: {
         fontSize: 16,
-        color: '#10b981',
-        fontWeight: '500',
+        color: '#1e293b',
+        marginLeft: 4,
     },
     headerInfo: {
         flex: 1,
+        alignItems: 'center',
     },
     title: {
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: '600',
-        color: '#fff',
+        color: '#1e293b',
     },
     subtitle: {
         fontSize: 12,
-        color: '#94a3b8',
+        color: '#64748b',
     },
-    keyboardButton: {
+    iconButton: {
         padding: 8,
-    },
-    keyboardButtonText: {
-        fontSize: 24,
     },
 
     // Manual Input
     manualInputContainer: {
         flexDirection: 'row',
-        padding: 12,
-        backgroundColor: '#0f172a',
+        padding: 16,
+        backgroundColor: '#fff',
         borderBottomWidth: 1,
-        borderBottomColor: '#334155',
+        borderBottomColor: '#e2e8f0',
+        zIndex: 20,
     },
     manualInput: {
         flex: 1,
-        backgroundColor: '#1e293b',
+        backgroundColor: '#f8fafc',
         borderWidth: 1,
-        borderColor: '#334155',
-        borderRadius: 10,
-        paddingHorizontal: 14,
+        borderColor: '#cbd5e1',
+        borderRadius: 12,
+        paddingHorizontal: 16,
         paddingVertical: 12,
         fontSize: 16,
-        color: '#fff',
-        marginRight: 10,
+        color: '#1e293b',
+        marginRight: 12,
     },
     searchButton: {
         backgroundColor: '#10b981',
-        paddingHorizontal: 20,
-        justifyContent: 'center',
-        borderRadius: 10,
-    },
-    searchButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#fff',
-    },
-
-    // Camera
-    cameraContainer: {
-        flex: 1,
-        position: 'relative',
-    },
-    overlay: {
-        ...StyleSheet.absoluteFillObject,
+        width: 50,
         justifyContent: 'center',
         alignItems: 'center',
+        borderRadius: 12,
+    },
+    disabledButton: {
+        backgroundColor: '#334155',
+    },
+
+    // Camera & Overlay
+    cameraContainer: {
+        flex: 1,
+        backgroundColor: '#000',
+    },
+    overlayContainer: {
+        ...StyleSheet.absoluteFillObject,
+    },
+    overlayTop: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+    },
+    overlayCenter: {
+        flexDirection: 'row',
+        height: SCAN_FRAME_SIZE,
+        top: -40, // Move frame up slightly
+    },
+    overlaySide: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+    },
+    overlayBottom: {
+        flex: 1.5,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        alignItems: 'center',
+        paddingTop: 40,
     },
     scanFrame: {
-        width: 250,
-        height: 250,
+        width: SCAN_FRAME_SIZE,
+        height: SCAN_FRAME_SIZE,
         position: 'relative',
     },
     corner: {
         position: 'absolute',
-        width: 40,
-        height: 40,
+        width: 32,
+        height: 32,
         borderColor: '#10b981',
+        borderWidth: 4,
     },
-    cornerTopLeft: {
-        top: 0,
-        left: 0,
-        borderTopWidth: 4,
-        borderLeftWidth: 4,
-        borderTopLeftRadius: 12,
-    },
-    cornerTopRight: {
-        top: 0,
-        right: 0,
-        borderTopWidth: 4,
-        borderRightWidth: 4,
-        borderTopRightRadius: 12,
-    },
-    cornerBottomLeft: {
-        bottom: 0,
-        left: 0,
-        borderBottomWidth: 4,
-        borderLeftWidth: 4,
-        borderBottomLeftRadius: 12,
-    },
-    cornerBottomRight: {
-        bottom: 0,
-        right: 0,
-        borderBottomWidth: 4,
-        borderRightWidth: 4,
-        borderBottomRightRadius: 12,
+    cornerTL: { top: 0, left: 0, borderBottomWidth: 0, borderRightWidth: 0, borderTopLeftRadius: 16 },
+    cornerTR: { top: 0, right: 0, borderBottomWidth: 0, borderLeftWidth: 0, borderTopRightRadius: 16 },
+    cornerBL: { bottom: 0, left: 0, borderTopWidth: 0, borderRightWidth: 0, borderBottomLeftRadius: 16 },
+    cornerBR: { bottom: 0, right: 0, borderTopWidth: 0, borderLeftWidth: 0, borderBottomRightRadius: 16 },
+    scanRay: {
+        position: 'absolute',
+        top: '50%',
+        left: 20,
+        right: 20,
+        height: 2,
+        backgroundColor: 'rgba(16, 185, 129, 0.5)',
+        shadowColor: '#10b981',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 1,
+        shadowRadius: 10,
     },
     scanHint: {
-        marginTop: 270,
+        color: '#cbd5e1',
         fontSize: 14,
-        color: '#fff',
-        textAlign: 'center',
+        fontWeight: '500',
+        backgroundColor: 'rgba(15, 23, 42, 0.8)',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        overflow: 'hidden',
     },
 
-    // Loading
-    loadingText: {
-        marginTop: 16,
-        fontSize: 14,
-        color: '#94a3b8',
-    },
-
-    // Result Container
-    resultContainer: {
+    // Result Panel (Bottom Sheet style)
+    resultPanel: {
         flex: 1,
-        padding: 20,
-        backgroundColor: '#fff',
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-    },
-
-    // Found Badge
-    foundBadge: {
-        backgroundColor: '#d1fae5',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 8,
-        alignSelf: 'flex-start',
-        marginBottom: 12,
-    },
-    foundBadgeText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#059669',
-    },
-
-    // Not Found Badge
-    notFoundBadge: {
-        backgroundColor: '#fee2e2',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 8,
-        alignSelf: 'flex-start',
-        marginBottom: 12,
-    },
-    notFoundBadgeText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#dc2626',
-    },
-
-    // Product Info
-    productName: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: '#1e293b',
-        marginBottom: 4,
-    },
-    barcodeText: {
-        fontSize: 14,
-        color: '#64748b',
-        marginBottom: 16,
-    },
-    reasonText: {
-        fontSize: 14,
-        color: '#64748b',
-        marginBottom: 16,
-    },
-
-    // Location Box
-    locationBox: {
-        backgroundColor: '#f0f9ff',
-        padding: 14,
-        borderRadius: 10,
-        marginBottom: 16,
-    },
-    locationLabel: {
-        fontSize: 12,
-        color: '#0284c7',
-        marginBottom: 4,
-    },
-    locationValue: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#0369a1',
-    },
-
-    // Details Row
-    detailsRow: {
-        flexDirection: 'row',
         backgroundColor: '#f8fafc',
-        padding: 12,
-        borderRadius: 10,
-        marginBottom: 20,
+        padding: 24,
     },
-    detailItem: {
-        flex: 1,
+    statusContent: {
         alignItems: 'center',
+        paddingVertical: 20,
     },
-    detailLabel: {
-        fontSize: 11,
-        color: '#94a3b8',
-        marginBottom: 2,
-    },
-    detailValue: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#374151',
-    },
-
-    // Action Buttons
-    actionsRow: {
-        flexDirection: 'row',
-        gap: 12,
-        marginTop: 'auto',
-    },
-    scanAgainButton: {
-        flex: 1,
-        backgroundColor: '#f1f5f9',
-        paddingVertical: 14,
-        borderRadius: 10,
-        alignItems: 'center',
-    },
-    scanAgainButtonText: {
+    loadingText: {
+        color: '#64748b',
         fontSize: 15,
-        fontWeight: '600',
-        color: '#475569',
+        fontWeight: '500',
     },
-    moveButton: {
-        flex: 1,
-        backgroundColor: '#3b82f6',
-        paddingVertical: 14,
-        borderRadius: 10,
+    iconCircle: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        justifyContent: 'center',
         alignItems: 'center',
-    },
-    moveButtonText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#fff',
-    },
-    deleteButton: {
-        flex: 1,
-        backgroundColor: '#ef4444',
-        paddingVertical: 14,
-        borderRadius: 10,
-        alignItems: 'center',
-    },
-    deleteButtonText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#fff',
-    },
-    addButton: {
-        flex: 1,
-        backgroundColor: '#10b981',
-        paddingVertical: 14,
-        borderRadius: 10,
-        alignItems: 'center',
-    },
-    addButtonText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#fff',
-    },
-
-    // Error States
-    errorIcon: {
-        fontSize: 48,
-        marginBottom: 12,
+        marginBottom: 16,
     },
     errorTitle: {
         fontSize: 18,
-        fontWeight: '600',
+        fontWeight: '700',
         color: '#1e293b',
         marginBottom: 8,
     },
@@ -761,29 +715,162 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#64748b',
         textAlign: 'center',
-        marginBottom: 20,
+        marginBottom: 24,
     },
-    retryButton: {
-        backgroundColor: '#10b981',
-        paddingHorizontal: 24,
-        paddingVertical: 12,
-        borderRadius: 10,
+
+    // Result Content
+    resultContent: {
+        gap: 16,
     },
-    retryButtonText: {
+    resultHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderRadius: 12,
+        gap: 8,
+    },
+    bgFound: { backgroundColor: '#dcfce7' },
+    bgWarning: { backgroundColor: '#fef3c7' },
+    bgError: { backgroundColor: '#fee2e2' },
+
+    resultHeaderText: {
         fontSize: 14,
-        fontWeight: '600',
-        color: '#fff',
+        fontWeight: '700',
     },
-    manualButton: {
-        backgroundColor: '#3b82f6',
-        paddingHorizontal: 24,
-        paddingVertical: 12,
-        borderRadius: 10,
-        marginTop: 12,
+    textFound: { color: '#15803d' },
+    textWarning: { color: '#b45309' },
+    textError: { color: '#b91c1c' },
+
+    productInfo: {
+        marginBottom: 8,
     },
-    manualButtonText: {
+    productName: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#1e293b',
+        marginBottom: 4,
+        lineHeight: 26,
+    },
+    barcodeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    barcodeText: {
         fontSize: 14,
-        fontWeight: '600',
-        color: '#fff',
+        color: '#64748b',
+        fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     },
+
+    // Location Card
+    locationCard: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    locationHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginBottom: 12,
+    },
+    locationTitle: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#3b82f6',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    locationDetails: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    locItem: {
+        alignItems: 'center',
+        flex: 1,
+    },
+    locLabel: {
+        fontSize: 11,
+        color: '#94a3b8',
+        marginBottom: 2,
+    },
+    locValue: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#1e293b',
+    },
+    verticalDivider: {
+        width: 1,
+        height: 24,
+        backgroundColor: '#e2e8f0',
+    },
+    divider: {
+        height: 1,
+        backgroundColor: '#f1f5f9',
+        marginVertical: 12,
+    },
+    priceRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    priceLabel: {
+        fontSize: 14,
+        color: '#64748b',
+    },
+    priceValue: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#10b981',
+        marginLeft: 'auto',
+    },
+
+    reasonText: {
+        fontSize: 14,
+        color: '#f59e0b',
+        backgroundColor: '#fffbeb',
+        padding: 12,
+        borderRadius: 8,
+        overflow: 'hidden',
+    },
+
+    // Buttons
+    actionGrid: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 8,
+    },
+    actionButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 14,
+        borderRadius: 12,
+        gap: 8,
+    },
+    secondaryButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#e2e8f0',
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        borderRadius: 10,
+        gap: 8,
+    },
+    secondaryButtonText: {
+        fontWeight: '600',
+        color: '#334155',
+    },
+
+    btnSecondary: { backgroundColor: '#f1f5f9' },
+    btnBlue: { backgroundColor: '#3b82f6' },
+    btnRed: { backgroundColor: '#ef4444' },
+    btnGreen: { backgroundColor: '#10b981' },
+
+    btnTextSecondary: { color: '#475569', fontWeight: '600', fontSize: 13 },
+    btnTextWhite: { color: '#fff', fontWeight: '600', fontSize: 13 },
 });

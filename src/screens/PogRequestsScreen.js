@@ -3,14 +3,7 @@
  * Displays list of POG change requests with status and cancellation options
  */
 
-// =============================================================================
-// IMPORTS
-// =============================================================================
-
-// React
-import React, { useState, useEffect, useMemo } from 'react';
-
-// React Native
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     View,
     Text,
@@ -24,8 +17,12 @@ import {
     Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+    ChevronLeft, Clock, CheckCircle2, XCircle,
+    AlertTriangle, Trash2, ArrowRightLeft, Plus,
+    Calendar, MapPin
+} from 'lucide-react-native';
 
-// Local imports
 import useAuthStore from '../store/authStore';
 import { getMyPogRequests, cancelPogRequest } from '../api/user';
 import { getErrorMessage } from '../utils/errorHelper';
@@ -37,38 +34,30 @@ import { BRANCHES } from '../constants/branches';
 
 /** Status display configuration */
 const STATUS_MAP = {
-    pending: { label: 'รอดำเนินการ', bgColor: '#fef3c7', textColor: '#92400e' },
-    approved: { label: 'อนุมัติ', bgColor: '#dbeafe', textColor: '#1e40af' },
-    rejected: { label: 'ไม่อนุมัติ', bgColor: '#fee2e2', textColor: '#991b1b' },
-    completed: { label: 'เสร็จสิ้น', bgColor: '#d1fae5', textColor: '#065f46' },
-    cancelled: { label: 'ยกเลิก', bgColor: '#f1f5f9', textColor: '#475569' },
+    pending: { label: 'รอดำเนินการ', bgColor: '#fef3c7', textColor: '#b45309', icon: Clock },
+    approved: { label: 'อนุมัติ', bgColor: '#dcfce7', textColor: '#15803d', icon: CheckCircle2 },
+    rejected: { label: 'ไม่อนุมัติ', bgColor: '#fee2e2', textColor: '#b91c1c', icon: XCircle },
+    completed: { label: 'เสร็จสิ้น', bgColor: '#dcfce7', textColor: '#15803d', icon: CheckCircle2 },
+    cancelled: { label: 'ยกเลิก', bgColor: '#f1f5f9', textColor: '#64748b', icon: XCircle },
 };
 
 /** Action type labels */
 const ACTION_MAP = {
-    add: '➕ เพิ่ม',
-    move: '↔️ ย้าย',
-    swap: '🔄 สลับ',
-    delete: '🗑️ ลบ',
+    add: { label: 'นำสินค้าเข้า', icon: Plus, color: '#10b981', bg: '#ecfdf5' },
+    move: { label: 'เปลี่ยนตำแหน่งสินค้า', icon: ArrowRightLeft, color: '#3b82f6', bg: '#eff6ff' },
+    swap: { label: 'สลับตำแหน่ง', icon: ArrowRightLeft, color: '#f59e0b', bg: '#fffbeb' },
+    delete: { label: 'นำสินค้าออก', icon: Trash2, color: '#ef4444', bg: '#fef2f2' },
 };
 
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
 
-/**
- * Format date string for Thai locale display
- * @param {string} dateStr - ISO date string
- * @returns {string} Formatted date string
- */
 const formatDate = (dateStr) => {
     if (!dateStr) return '-';
     const d = new Date(dateStr);
     return d.toLocaleDateString('th-TH', {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
+        day: '2-digit', month: '2-digit', year: 'numeric'
     });
 };
 
@@ -77,48 +66,86 @@ const formatDate = (dateStr) => {
 // =============================================================================
 
 export default function PogRequestsScreen({ navigation }) {
-    // -------------------------------------------------------------------------
-    // State & Store
-    // -------------------------------------------------------------------------
     const user = useAuthStore((s) => s.user);
     const storecode = user?.storecode || user?.name;
 
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [data, setData] = useState([]);
+    const [page, setPage] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
+    const hasMoreRef = useRef(true); // Ref for synchronous check
     const [cancellingId, setCancellingId] = useState(null);
 
     // Modal state
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [targetCancelId, setTargetCancelId] = useState(null);
 
-    // -------------------------------------------------------------------------
-    // Derived Values
-    // -------------------------------------------------------------------------
     const branchName = useMemo(() => {
         if (!storecode) return 'ผู้ใช้';
         const branch = BRANCHES.find((b) => b.code === storecode);
         return branch ? branch.label.replace(`${storecode} - `, '') : storecode;
     }, [storecode]);
 
-    // -------------------------------------------------------------------------
-    // Data Loading
-    // -------------------------------------------------------------------------
-    const loadData = async (isRefresh = false) => {
+    const loadData = async (isRefresh = false, isLoadMore = false) => {
         if (!storecode) return;
+        if (!hasMore && isLoadMore) return;
+        if (loadingMore) return;
 
-        if (isRefresh) setRefreshing(true);
-        else setLoading(true);
+        const targetPage = isRefresh ? 1 : (isLoadMore ? page + 1 : 1);
+        const limit = 20;
+
+        if (isRefresh) {
+            setRefreshing(true);
+            setHasMore(true);
+            hasMoreRef.current = true;
+        } else if (isLoadMore) {
+            setLoadingMore(true);
+        } else {
+            setLoading(true);
+        }
 
         try {
-            const result = await getMyPogRequests(storecode);
-            setData(result?.data || []);
+            const result = await getMyPogRequests(storecode, targetPage, limit);
+            const newData = result?.data || [];
+
+            if (isRefresh || (!isLoadMore)) {
+                setData(newData);
+                setPage(1);
+            } else {
+                setData(prev => {
+                    const existingIds = new Set(prev.map(item => item.id));
+                    const uniqueNewData = newData.filter(item => !existingIds.has(item.id));
+                    return [...prev, ...uniqueNewData];
+                });
+                setPage(targetPage);
+            }
+
+            // Check if we have more data based on total count
+            const total = result?.pagination?.total || 0;
+            setTotalCount(total);
+
+            const currentTotal = isRefresh || !isLoadMore
+                ? newData.length
+                : data.length + newData.filter(item => !new Set(data.map(d => d.id)).has(item.id)).length;
+
+            if (currentTotal >= total || newData.length < limit) {
+                setHasMore(false);
+                hasMoreRef.current = false;
+            } else {
+                setHasMore(true);
+                hasMoreRef.current = true;
+            }
+
         } catch (err) {
             console.error('Load POG requests error:', err);
-            setData([]);
+            if (!isLoadMore) setData([]);
         } finally {
             setLoading(false);
             setRefreshing(false);
+            setLoadingMore(false);
         }
     };
 
@@ -126,9 +153,6 @@ export default function PogRequestsScreen({ navigation }) {
         loadData();
     }, [storecode]);
 
-    // -------------------------------------------------------------------------
-    // Event Handlers
-    // -------------------------------------------------------------------------
     const handleCancelPress = (id) => {
         setTargetCancelId(id);
         setShowCancelModal(true);
@@ -164,38 +188,58 @@ export default function PogRequestsScreen({ navigation }) {
         }
     };
 
-    // -------------------------------------------------------------------------
-    // Render Helpers
-    // -------------------------------------------------------------------------
-    const renderRequestItem = ({ item }) => {
+    const renderRequestItem = ({ item, index }) => {
         const statusInfo = STATUS_MAP[item.status] || STATUS_MAP.pending;
-        const actionLabel = ACTION_MAP[item.action] || item.action;
+        const actionInfo = ACTION_MAP[item.action] || { label: item.action, icon: AlertTriangle, color: '#64748b', bg: '#f1f5f9' };
+        const StatusIcon = statusInfo.icon;
+        const ActionIcon = actionInfo.icon;
 
         return (
             <View style={styles.requestCard}>
-                {/* Row 1: Status + Product */}
-                <View style={styles.cardRow}>
+                {/* Header: Index, Action & Status */}
+                <View style={styles.cardHeader}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#64748b' }}>#{index + 1}</Text>
+                        <View style={[styles.actionBadge, { backgroundColor: actionInfo.bg }]}>
+                            <ActionIcon size={14} color={actionInfo.color} />
+                            <Text style={[styles.actionText, { color: actionInfo.color }]}>{actionInfo.label}</Text>
+                        </View>
+                    </View>
                     <View style={[styles.statusBadge, { backgroundColor: statusInfo.bgColor }]}>
+                        <StatusIcon size={12} color={statusInfo.textColor} />
                         <Text style={[styles.statusText, { color: statusInfo.textColor }]}>
                             {statusInfo.label}
                         </Text>
                     </View>
-                    <Text style={styles.productName} numberOfLines={1}>
-                        {item.productName || item.barcode}
-                    </Text>
                 </View>
 
-                {/* Row 2: Action + Location + Date + Cancel */}
-                <View style={styles.cardRow}>
-                    <Text style={styles.actionLabel}>{actionLabel}</Text>
-                    <Text style={styles.locationText} numberOfLines={1}>
-                        {item.fromShelf && `${item.fromShelf}/${item.fromRow}/${item.fromIndex}`}
-                        {item.fromShelf && item.toShelf && ' → '}
-                        {item.toShelf && `${item.toShelf}/${item.toRow}/${item.toIndex}`}
+                {/* Product Info */}
+                <View style={styles.productSection}>
+                    <Text style={styles.productName} numberOfLines={2}>
+                        {item.productName || 'ไม่ระบุชื่อสินค้า'}
                     </Text>
-                    <Text style={styles.dateText}>{formatDate(item.createdAt)}</Text>
+                    <Text style={styles.barcodeText}>{item.barcode}</Text>
+                </View>
 
-                    {item.status === 'pending' && (
+                {/* Location Info */}
+                <View style={styles.locationSection}>
+                    <View style={styles.locationRow}>
+                        <MapPin size={14} color="#94a3b8" />
+                        <Text style={styles.locationText} numberOfLines={1}>
+                            {item.fromShelf && `${item.fromShelf} / ชั้น ${item.fromRow || '-'} / ลำดับ ${item.fromIndex || '-'}`}
+                            {(item.fromShelf && item.toShelf) && ' → '}
+                            {item.toShelf && `${item.toShelf} / ชั้น ${item.toRow || '-'} / ลำดับ ${item.toIndex || '-'}`}
+                        </Text>
+                    </View>
+                    <View style={styles.dateRow}>
+                        <Calendar size={14} color="#94a3b8" />
+                        <Text style={styles.dateText}>{formatDate(item.createdAt)}</Text>
+                    </View>
+                </View>
+
+                {/* Cancel Button (Only if pending) */}
+                {item.status === 'pending' && (
+                    <View style={styles.cardFooter}>
                         <TouchableOpacity
                             style={styles.cancelButton}
                             onPress={() => handleCancelPress(item.id)}
@@ -204,36 +248,27 @@ export default function PogRequestsScreen({ navigation }) {
                             {cancellingId === item.id ? (
                                 <ActivityIndicator size="small" color="#dc2626" />
                             ) : (
-                                <Text style={styles.cancelButtonText}>ยกเลิก</Text>
+                                <Text style={styles.cancelButtonText}>ยกเลิกคำขอ</Text>
                             )}
                         </TouchableOpacity>
-                    )}
-                </View>
+                    </View>
+                )}
             </View>
         );
     };
 
-    const renderEmptyList = () => (
-        <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📋</Text>
-            <Text style={styles.emptyText}>ไม่มีประวัติคำขอ</Text>
-        </View>
-    );
-
-    // -------------------------------------------------------------------------
-    // Render
-    // -------------------------------------------------------------------------
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-                    <Text style={styles.backButtonText}>‹ กลับ</Text>
+                    <ChevronLeft size={24} color="#10b981" />
+                    <Text style={styles.backButtonText}>กลับ</Text>
                 </TouchableOpacity>
                 <View style={styles.headerInfo}>
-                    <Text style={styles.title}>ประวัติคำขอสาขา</Text>
+                    <Text style={styles.title}>ประวัติคำขอ</Text>
                     <Text style={styles.subtitle}>
-                        {branchName} - ทั้งหมด {data.length} รายการ
+                        {branchName} • {data.length} รายการ
                     </Text>
                 </View>
             </View>
@@ -258,7 +293,31 @@ export default function PogRequestsScreen({ navigation }) {
                             tintColor="#10b981"
                         />
                     }
-                    ListEmptyComponent={renderEmptyList}
+                    onEndReached={() => {
+                        if (hasMoreRef.current && !loading && !loadingMore) {
+                            loadData(false, true);
+                        }
+                    }}
+                    onEndReachedThreshold={0.1}
+                    ListFooterComponent={
+                        loadingMore ? (
+                            <View style={{ paddingVertical: 20 }}>
+                                <ActivityIndicator size="small" color="#94a3b8" />
+                            </View>
+                        ) : (
+                            !hasMore && data.length > 0 ? (
+                                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                                    <Text style={{ color: '#94a3b8', fontSize: 12 }}>--- ครบถ้วน ---</Text>
+                                </View>
+                            ) : null
+                        )
+                    }
+                    ListEmptyComponent={
+                        <View style={styles.emptyContainer}>
+                            <Clock size={48} color="#cbd5e1" />
+                            <Text style={styles.emptyText}>ไม่มีประวัติคำขอ</Text>
+                        </View>
+                    }
                 />
             )}
 
@@ -266,23 +325,25 @@ export default function PogRequestsScreen({ navigation }) {
             <Modal visible={showCancelModal} transparent animationType="fade">
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContainer}>
-                        <Text style={styles.modalIcon}>⚠️</Text>
+                        <View style={styles.modalIconCircle}>
+                            <AlertTriangle size={32} color="#dc2626" />
+                        </View>
                         <Text style={styles.modalTitle}>ยืนยันการยกเลิก</Text>
                         <Text style={styles.modalMessage}>คุณต้องการยกเลิกรายการนี้หรือไม่?</Text>
 
                         <View style={styles.modalButtons}>
                             <TouchableOpacity
-                                style={[styles.modalButton, styles.modalButtonCancel]}
+                                style={[styles.modalButton, styles.btnCancel]}
                                 onPress={() => setShowCancelModal(false)}
                             >
-                                <Text style={styles.modalButtonTextCancel}>เก็บไว้</Text>
+                                <Text style={styles.btnTextCancel}>เก็บไว้</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity
-                                style={[styles.modalButton, styles.modalButtonConfirm]}
+                                style={[styles.modalButton, styles.btnConfirm]}
                                 onPress={confirmCancel}
                             >
-                                <Text style={styles.modalButtonTextConfirm}>ยกเลิกเลย</Text>
+                                <Text style={styles.btnTextConfirm}>ยกเลิกเลย</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -292,20 +353,11 @@ export default function PogRequestsScreen({ navigation }) {
     );
 }
 
-// =============================================================================
-// STYLES
-// =============================================================================
-
 const styles = StyleSheet.create({
-    // Layout
     container: {
         flex: 1,
-        backgroundColor: '#f0fdf4',
-        paddingTop: 24,
-        paddingBottom: 16,
+        backgroundColor: '#f8fafc',
     },
-
-    // Header
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -313,10 +365,13 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         backgroundColor: '#fff',
         borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
+        borderBottomColor: '#f1f5f9',
     },
     backButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
         paddingRight: 12,
+        gap: 4,
     },
     backButtonText: {
         fontSize: 16,
@@ -327,7 +382,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     title: {
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: '600',
         color: '#1e293b',
     },
@@ -336,7 +391,129 @@ const styles = StyleSheet.create({
         color: '#64748b',
     },
 
-    // Loading
+    // List
+    listContent: {
+        padding: 16,
+        gap: 12,
+    },
+
+    // Card
+    requestCard: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.05,
+                shadowRadius: 8,
+            },
+            android: {
+                elevation: 2,
+            },
+        }),
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    actionBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        gap: 4,
+    },
+    actionText: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    statusBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        gap: 4,
+    },
+    statusText: {
+        fontSize: 11,
+        fontWeight: '600',
+    },
+
+    // Product Info
+    productSection: {
+        marginBottom: 12,
+    },
+    productName: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#1e293b',
+        lineHeight: 22,
+        marginBottom: 4,
+    },
+    barcodeText: {
+        fontSize: 13,
+        color: '#64748b',
+        fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    },
+
+    // Location Info
+    locationSection: {
+        backgroundColor: '#f8fafc',
+        borderRadius: 8,
+        padding: 10,
+        gap: 6,
+    },
+    locationRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    locationText: {
+        fontSize: 13,
+        color: '#475569',
+        flex: 1,
+    },
+    dateRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    dateText: {
+        fontSize: 12,
+        color: '#94a3b8',
+    },
+
+    // Footer
+    cardFooter: {
+        marginTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#f1f5f9',
+        paddingTop: 12,
+        alignItems: 'flex-end',
+    },
+    cancelButton: {
+        backgroundColor: '#fff1f2',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: '#fecdd3',
+    },
+    cancelButtonText: {
+        color: '#be123c',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+
+    // Loading & Empty
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
@@ -347,100 +524,14 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#64748b',
     },
-
-    // List
-    listContent: {
-        padding: 12,
-    },
-
-    // Request Card
-    requestCard: {
-        backgroundColor: '#fff',
-        borderRadius: 8,
-        padding: 10,
-        marginBottom: 8,
-        ...Platform.select({
-            web: { boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)' },
-            default: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.05,
-                shadowRadius: 2,
-                elevation: 1,
-            },
-        }),
-    },
-    cardRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 4,
-    },
-    indexBadge: {
-        fontSize: 11,
-        fontWeight: '600',
-        color: '#94a3b8',
-        marginRight: 8,
-        minWidth: 20,
-    },
-    statusBadge: {
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 4,
-        marginRight: 8,
-    },
-    statusText: {
-        fontSize: 10,
-        fontWeight: '600',
-    },
-    actionLabel: {
-        fontSize: 11,
-        fontWeight: '500',
-        color: '#64748b',
-        marginRight: 8,
-    },
-    dateText: {
-        fontSize: 10,
-        color: '#9ca3af',
-    },
-    productName: {
-        fontSize: 12,
-        fontWeight: '500',
-        color: '#1e293b',
-        flex: 1,
-        marginRight: 8,
-    },
-    locationText: {
-        fontSize: 11,
-        color: '#64748b',
-        flex: 1,
-    },
-
-    // Cancel Button
-    cancelButton: {
-        backgroundColor: '#fef2f2',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 4,
-        marginLeft: 8,
-    },
-    cancelButtonText: {
-        fontSize: 10,
-        fontWeight: '500',
-        color: '#dc2626',
-    },
-
-    // Empty State
     emptyContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        paddingVertical: 60,
-    },
-    emptyIcon: {
-        fontSize: 48,
-        marginBottom: 12,
+        paddingVertical: 80,
     },
     emptyText: {
+        marginTop: 16,
         fontSize: 14,
         color: '#64748b',
     },
@@ -448,30 +539,42 @@ const styles = StyleSheet.create({
     // Modal
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'rgba(15, 23, 42, 0.4)',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 20,
+        padding: 24,
     },
     modalContainer: {
         backgroundColor: '#fff',
-        borderRadius: 16,
+        borderRadius: 24,
         padding: 24,
         width: '100%',
-        maxWidth: 320,
+        maxWidth: 340,
         alignItems: 'center',
         ...Platform.select({
-            web: { boxShadow: '0 4px 16px rgba(0,0,0,0.2)' },
-            default: { elevation: 8 },
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.1,
+                shadowRadius: 20,
+            },
+            android: {
+                elevation: 10,
+            },
         }),
     },
-    modalIcon: {
-        fontSize: 48,
+    modalIconCircle: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: '#fee2e2',
+        justifyContent: 'center',
+        alignItems: 'center',
         marginBottom: 16,
     },
     modalTitle: {
         fontSize: 18,
-        fontWeight: '600',
+        fontWeight: '700',
         color: '#1e293b',
         marginBottom: 8,
     },
@@ -480,6 +583,7 @@ const styles = StyleSheet.create({
         color: '#64748b',
         textAlign: 'center',
         marginBottom: 24,
+        lineHeight: 20,
     },
     modalButtons: {
         flexDirection: 'row',
@@ -489,21 +593,21 @@ const styles = StyleSheet.create({
     modalButton: {
         flex: 1,
         paddingVertical: 12,
-        borderRadius: 8,
+        borderRadius: 12,
         alignItems: 'center',
     },
-    modalButtonCancel: {
+    btnCancel: {
         backgroundColor: '#f1f5f9',
     },
-    modalButtonConfirm: {
-        backgroundColor: '#fee2e2',
+    btnConfirm: {
+        backgroundColor: '#dc2626',
     },
-    modalButtonTextCancel: {
+    btnTextCancel: {
+        color: '#475569',
         fontWeight: '600',
-        color: '#64748b',
     },
-    modalButtonTextConfirm: {
+    btnTextConfirm: {
+        color: '#fff',
         fontWeight: '600',
-        color: '#dc2626',
     },
 });

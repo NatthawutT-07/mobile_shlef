@@ -12,6 +12,11 @@ import {
     Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+    Search, ChevronLeft, ChevronDown, ChevronRight,
+    Layers, Package, Edit, Clock, Inbox, AlertCircle
+} from 'lucide-react-native';
+
 import useAuthStore from '../store/authStore';
 import { getTemplateAndProduct, getStockLastUpdate } from '../api/user';
 import { getErrorMessage } from '../utils/errorHelper';
@@ -48,20 +53,24 @@ const formatValue = (v) => {
     return v;
 };
 
-// Format Bangkok time
+// Format Bangkok time (24-hour format)
 const formatBangkokTime = (value) => {
     if (!value) return '-';
     const d = new Date(value);
     if (isNaN(d.getTime())) return '-';
-    return d.toLocaleString('th-TH', {
-        timeZone: 'Asia/Bangkok',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-    });
+
+    // Add 7 hours for Bangkok timezone (UTC+7)
+    const bangkokOffset = 7 * 60 * 60 * 1000;
+    const utc = d.getTime() + (d.getTimezoneOffset() * 60 * 1000);
+    const bangkokTime = new Date(utc + bangkokOffset);
+
+    const day = String(bangkokTime.getDate()).padStart(2, '0');
+    const month = String(bangkokTime.getMonth() + 1).padStart(2, '0');
+    const year = bangkokTime.getFullYear() + 543; // Buddhist year
+    const hours = String(bangkokTime.getHours()).padStart(2, '0');
+    const minutes = String(bangkokTime.getMinutes()).padStart(2, '0');
+
+    return `${day}/${month}/${year} ${hours}:${minutes}`;
 };
 
 export default function PlanogramScreen({ navigation }) {
@@ -155,19 +164,21 @@ export default function PlanogramScreen({ navigation }) {
                     onPress={() => setExpandedShelf(isExpanded ? null : shelf.shelfCode)}
                     activeOpacity={0.7}
                 >
+                    <View style={styles.shelfIconBg}>
+                        <Layers size={20} color="#3b82f6" />
+                    </View>
                     <View style={styles.shelfInfo}>
-                        <Text style={styles.shelfCode}>{shelf.shelfCode}</Text>
+                        <View style={styles.shelfTitleRow}>
+                            <Text style={styles.shelfCode}>{shelf.shelfCode}</Text>
+                            <View style={styles.productCountBadge}>
+                                <Text style={styles.productCountText}>{shelf.products.length} รายการ</Text>
+                            </View>
+                        </View>
                         <Text style={styles.shelfName} numberOfLines={1}>
-                            {shelf.fullName}
+                            {shelf.fullName} • {shelf.rowQty} ชั้น
                         </Text>
                     </View>
-                    <View style={styles.shelfMeta}>
-                        <View style={styles.rowBadge}>
-                            <Text style={styles.rowBadgeText}>{shelf.rowQty} ชั้น</Text>
-                        </View>
-                        <Text style={styles.productCount}>{shelf.products.length} รายการ</Text>
-                        <Text style={styles.expandIcon}>{isExpanded ? '▼' : '▶'}</Text>
-                    </View>
+                    {isExpanded ? <ChevronDown size={20} color="#94a3b8" /> : <ChevronRight size={20} color="#94a3b8" />}
                 </TouchableOpacity>
 
                 {/* Expanded: Show rows */}
@@ -180,7 +191,9 @@ export default function PlanogramScreen({ navigation }) {
                             return (
                                 <View key={rowNo} style={styles.rowContainer}>
                                     <View style={styles.rowHeader}>
-                                        <Text style={styles.rowLabel}>ชั้นที่ {rowNo}</Text>
+                                        <View style={styles.rowLabelBadge}>
+                                            <Text style={styles.rowLabel}>ชั้นที่ {rowNo}</Text>
+                                        </View>
                                         <Text style={styles.rowProductCount}>{rowProducts.length} รายการ</Text>
                                     </View>
 
@@ -188,8 +201,10 @@ export default function PlanogramScreen({ navigation }) {
                                     {rowProducts.map((product, pIdx) => (
                                         <View key={`${product.barcode}-${pIdx}`} style={styles.productCard}>
                                             <View style={styles.productRow}>
-                                                {/* Index */}
-                                                <Text style={styles.indexText}>{product.index || pIdx + 1}</Text>
+                                                {/* Index Badge */}
+                                                <View style={styles.indexBadge}>
+                                                    <Text style={styles.indexText}>{product.index || pIdx + 1}</Text>
+                                                </View>
 
                                                 {/* Product Info */}
                                                 <View style={styles.productMainInfo}>
@@ -201,25 +216,25 @@ export default function PlanogramScreen({ navigation }) {
 
                                                 {/* Quick Stats */}
                                                 <View style={styles.quickStats}>
-                                                    <Text style={styles.statText}>฿{formatValue(product.salesPriceIncVAT)}</Text>
-                                                    <Text style={styles.minMaxText}>
-                                                        Min {formatValue(product.minStore)} / Max {formatValue(product.maxStore)}  <Text style={styles.stockText}>สต็อค {formatValue(product.stockQuantity)}</Text>
-                                                    </Text>
+                                                    <Text style={styles.priceText}>฿{formatValue(product.salesPriceIncVAT)}</Text>
+                                                    <Text style={styles.stockText}>สต็อค {formatValue(product.stockQuantity)}</Text>
                                                 </View>
 
-                                                {/* Small Edit Button */}
+                                                {/* Edit Button */}
                                                 <TouchableOpacity
                                                     style={styles.editButton}
                                                     onPress={() => handleRequestAction(product)}
                                                 >
-                                                    <Text style={styles.editButtonText}>✏️</Text>
+                                                    <Edit size={16} color="#64748b" />
                                                 </TouchableOpacity>
                                             </View>
                                         </View>
                                     ))}
 
                                     {rowProducts.length === 0 && (
-                                        <Text style={styles.noProductsText}>ไม่มีสินค้าในชั้นนี้</Text>
+                                        <View style={styles.emptyRowState}>
+                                            <Text style={styles.noProductsText}>ว่าง</Text>
+                                        </View>
                                     )}
                                 </View>
                             );
@@ -231,38 +246,47 @@ export default function PlanogramScreen({ navigation }) {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-                    <Text style={styles.backButtonText}>‹ กลับ</Text>
+                    <ChevronLeft size={24} color="#10b981" />
+                    <Text style={styles.backButtonText}>กลับ</Text>
                 </TouchableOpacity>
                 <View style={styles.headerInfo}>
-                    <View style={styles.titleRow}>
-                        <Text style={styles.title}>Planogram</Text>
-                        <Text style={styles.titleSeparator}> - </Text>
-                        <Text style={styles.subtitle} numberOfLines={1}>
-                            {branchName?.includes('/') ? branchName.split('/').pop().trim() : (branchName || storecode)}
+                    <Text style={styles.title}>Planogram</Text>
+                    <Text style={styles.subtitle} numberOfLines={1}>
+                        {branchName?.includes('/') ? branchName.split('/').pop().trim() : (branchName || storecode)}
+                    </Text>
+                </View>
+                {stockUpdatedAt && (
+                    <View style={styles.stockUpdateBadge}>
+                        <Clock size={10} color="#fff" />
+                        <Text style={styles.stockTimeText}>
+                            Stock: {formatBangkokTime(stockUpdatedAt)}
                         </Text>
                     </View>
-                    {stockUpdatedAt && (
-                        <Text style={styles.stockTimeText}>
-                            Stock ล่าสุด: {formatBangkokTime(stockUpdatedAt)}
-                        </Text>
-                    )}
-                </View>
+                )}
             </View>
 
             {/* Search */}
             <View style={styles.searchContainer}>
-                <TextInput
-                    style={styles.searchInput}
-                    placeholder="🔍 ค้นหา shelf, บาร์โค้ด หรือชื่อสินค้า..."
-                    placeholderTextColor="#94a3b8"
-                    value={searchText}
-                    onChangeText={setSearchText}
-                    autoCorrect={false}
-                />
+                <View style={styles.searchInputWrapper}>
+                    <Search size={20} color="#94a3b8" style={styles.searchIcon} />
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="ค้นหา Shelf, บาร์โค้ด หรือชื่อสินค้า..."
+                        placeholderTextColor="#94a3b8"
+                        value={searchText}
+                        onChangeText={setSearchText}
+                        autoCorrect={false}
+                    />
+                    {searchText.length > 0 && (
+                        <TouchableOpacity onPress={() => setSearchText('')} style={styles.clearButton}>
+                            <AlertCircle size={16} color="#94a3b8" style={{ transform: [{ rotate: '45deg' }] }} />
+                        </TouchableOpacity>
+                    )}
+                </View>
             </View>
 
             {/* Content */}
@@ -291,9 +315,9 @@ export default function PlanogramScreen({ navigation }) {
                     }
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>
-                            <Text style={styles.emptyIcon}>📦</Text>
+                            <Inbox size={48} color="#cbd5e1" />
                             <Text style={styles.emptyText}>
-                                {searchText ? 'ไม่พบ shelf ที่ค้นหา' : 'ไม่มีข้อมูล Planogram'}
+                                {searchText ? 'ไม่พบข้อมูลที่ค้นหา' : 'ไม่มีข้อมูล Planogram'}
                             </Text>
                         </View>
                     }
@@ -306,9 +330,7 @@ export default function PlanogramScreen({ navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f0fdf4',
-        paddingTop: 24,
-        paddingBottom: 16,
+        backgroundColor: '#f8fafc',
     },
     header: {
         flexDirection: 'row',
@@ -317,10 +339,13 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         backgroundColor: '#fff',
         borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
+        borderBottomColor: '#f1f5f9',
     },
     backButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
         paddingRight: 12,
+        gap: 4,
     },
     backButtonText: {
         fontSize: 16,
@@ -330,53 +355,60 @@ const styles = StyleSheet.create({
     headerInfo: {
         flex: 1,
     },
-    titleRow: {
-        flexDirection: 'row',
-        alignItems: 'baseline',
-    },
     title: {
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: '600',
         color: '#1e293b',
-    },
-    titleSeparator: {
-        fontSize: 14,
-        color: '#94a3b8',
     },
     subtitle: {
         fontSize: 12,
         color: '#64748b',
     },
+    stockUpdateBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#10b981',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        gap: 4,
+    },
     stockTimeText: {
-        fontSize: 10,
-        color: '#10b981',
-        marginTop: 2,
-    },
-    addButton: {
-        backgroundColor: '#f59e0b',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 8,
-    },
-    addButtonText: {
-        fontSize: 13,
-        fontWeight: '600',
+        fontSize: 11,
         color: '#fff',
+        fontWeight: '600',
     },
+
+    // Search
     searchContainer: {
-        padding: 12,
+        padding: 16,
         backgroundColor: '#fff',
         borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
+        borderBottomColor: '#f1f5f9',
+    },
+    searchInputWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f1f5f9',
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    searchIcon: {
+        marginRight: 8,
     },
     searchInput: {
-        backgroundColor: '#f1f5f9',
-        borderRadius: 10,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        fontSize: 14,
+        flex: 1,
+        paddingVertical: 12,
+        fontSize: 15,
         color: '#1e293b',
     },
+    clearButton: {
+        padding: 4,
+    },
+
+    // Loading & Empty
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
@@ -387,23 +419,37 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#64748b',
     },
+    emptyContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 80,
+    },
+    emptyText: {
+        marginTop: 16,
+        fontSize: 14,
+        color: '#64748b',
+    },
+
+    // List
     listContent: {
-        padding: 12,
+        padding: 16,
     },
     shelfCard: {
         backgroundColor: '#fff',
-        borderRadius: 12,
+        borderRadius: 16,
         marginBottom: 12,
         overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
         ...Platform.select({
-            web: {
-                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-            },
-            default: {
+            ios: {
                 shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.1,
-                shadowRadius: 3,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.05,
+                shadowRadius: 8,
+            },
+            android: {
                 elevation: 2,
             },
         }),
@@ -411,51 +457,54 @@ const styles = StyleSheet.create({
     shelfHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 14,
-        backgroundColor: '#f8fafc',
-        borderBottomWidth: 1,
-        borderBottomColor: '#e2e8f0',
+        padding: 16,
+        backgroundColor: '#fff',
+    },
+    shelfIconBg: {
+        width: 40,
+        height: 40,
+        borderRadius: 10,
+        backgroundColor: '#eff6ff',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
     },
     shelfInfo: {
         flex: 1,
+        marginRight: 8,
+    },
+    shelfTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 4,
     },
     shelfCode: {
         fontSize: 16,
         fontWeight: '700',
-        color: '#3b82f6',
+        color: '#1e293b',
+    },
+    productCountBadge: {
+        backgroundColor: '#f1f5f9',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 6,
+    },
+    productCountText: {
+        fontSize: 11,
+        color: '#64748b',
+        fontWeight: '500',
     },
     shelfName: {
         fontSize: 13,
         color: '#64748b',
-        marginTop: 2,
     },
-    shelfMeta: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    rowBadge: {
-        backgroundColor: '#dbeafe',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
-    },
-    rowBadgeText: {
-        fontSize: 11,
-        fontWeight: '600',
-        color: '#2563eb',
-    },
-    productCount: {
-        fontSize: 12,
-        color: '#64748b',
-    },
-    expandIcon: {
-        fontSize: 12,
-        color: '#9ca3af',
-        marginLeft: 4,
-    },
+
+    // Expanded Content
     shelfContent: {
+        backgroundColor: '#f8fafc',
+        borderTopWidth: 1,
+        borderTopColor: '#f1f5f9',
         padding: 12,
     },
     rowContainer: {
@@ -465,104 +514,102 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        backgroundColor: '#fef3c7',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 8,
-        marginBottom: 10,
+        marginBottom: 8,
+        paddingHorizontal: 4,
+    },
+    rowLabelBadge: {
+        backgroundColor: '#fff7ed',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: '#ffedd5',
     },
     rowLabel: {
-        fontSize: 13,
+        fontSize: 12,
         fontWeight: '600',
-        color: '#92400e',
+        color: '#c2410c',
     },
     rowProductCount: {
         fontSize: 11,
-        color: '#b45309',
+        color: '#94a3b8',
     },
-    productCard: {
-        backgroundColor: '#f8fafc',
-        paddingVertical: 8,
-        paddingHorizontal: 10,
+    emptyRowState: {
+        backgroundColor: '#f1f5f9',
+        padding: 8,
         borderRadius: 8,
-        marginBottom: 4,
+        alignItems: 'center',
+        borderStyle: 'dashed',
+        borderWidth: 1,
+        borderColor: '#cbd5e1',
+    },
+    noProductsText: {
+        fontSize: 12,
+        color: '#94a3b8',
+    },
+
+    // Product Card
+    productCard: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        padding: 10,
+        marginBottom: 8,
         borderWidth: 1,
         borderColor: '#e2e8f0',
     },
     productRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 12,
+    },
+    indexBadge: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: '#f1f5f9',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     indexText: {
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: '600',
         color: '#64748b',
-        width: 20,
-        textAlign: 'center',
     },
     productMainInfo: {
         flex: 1,
-        marginLeft: 8,
     },
     productName: {
-        fontSize: 12,
+        fontSize: 13,
         fontWeight: '500',
         color: '#1e293b',
+        lineHeight: 18,
     },
     productBarcode: {
-        fontSize: 10,
+        fontSize: 11,
         color: '#94a3b8',
+        marginTop: 2,
         fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     },
     quickStats: {
         alignItems: 'flex-end',
-        marginRight: 8,
     },
-    statText: {
-        fontSize: 11,
+    priceText: {
+        fontSize: 13,
         fontWeight: '600',
-        color: '#374151',
+        color: '#10b981',
     },
     stockText: {
         fontSize: 10,
-        color: '#059669',
-        fontWeight: '500',
-    },
-    minMaxText: {
-        fontSize: 9,
-        color: '#6366f1',
-        fontWeight: '500',
+        color: '#64748b',
     },
     editButton: {
-        width: 24,
-        height: 24,
-        borderRadius: 4,
-        backgroundColor: '#f1f5f9',
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: '#f8fafc',
         justifyContent: 'center',
         alignItems: 'center',
-        opacity: 0.6,
-    },
-    editButtonText: {
-        fontSize: 10,
-    },
-    noProductsText: {
-        textAlign: 'center',
-        fontSize: 12,
-        color: '#94a3b8',
-        paddingVertical: 12,
-    },
-    emptyContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingVertical: 60,
-    },
-    emptyIcon: {
-        fontSize: 48,
-        marginBottom: 12,
-    },
-    emptyText: {
-        fontSize: 14,
-        color: '#64748b',
+        borderWidth: 1,
+        borderColor: '#f1f5f9',
     },
 });

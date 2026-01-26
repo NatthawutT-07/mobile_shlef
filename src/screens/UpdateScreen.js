@@ -10,8 +10,10 @@ import {
     StyleSheet,
     ActivityIndicator,
     Platform,
+    TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Download, Loader2, CheckCircle2, AlertCircle, RefreshCw, XCircle } from 'lucide-react-native';
 import * as Updates from 'expo-updates';
 import useUpdateStore from '../store/updateStore';
 
@@ -80,52 +82,50 @@ export default function UpdateScreen({ navigation }) {
         }
     };
 
-    const getStatusText = () => {
+    const getStatusInfo = () => {
         switch (status) {
             case 'preparing':
-                return 'กำลังเตรียมอัพเดท...';
+                return { text: 'กำลังเตรียมอัพเดท...', icon: Loader2, color: '#f59e0b', spin: true };
             case 'downloading':
-                return 'กำลังดาวน์โหลด...';
+                return { text: 'กำลังดาวน์โหลดข้อมูล...', icon: Download, color: '#3b82f6', spin: false };
             case 'installing':
-                return 'กำลังติดตั้ง...';
+                return { text: 'กำลังติดตั้ง...', icon: RefreshCw, color: '#8b5cf6', spin: true };
             case 'reloading':
-                return 'กำลังรีโหลดแอพ...';
+                return { text: 'กำลังรีโหลดแอพ...', icon: RefreshCw, color: '#10b981', spin: true };
             case 'complete':
-                return 'อัพเดทเสร็จสิ้น!';
+                return { text: 'อัพเดทเสร็จสิ้น!', icon: CheckCircle2, color: '#10b981', spin: false };
             case 'error':
-                return 'เกิดข้อผิดพลาด';
+                return { text: 'เกิดข้อผิดพลาด', icon: XCircle, color: '#ef4444', spin: false };
             default:
-                return 'กำลังอัพเดท...';
+                return { text: 'กำลังอัพเดท...', icon: Loader2, color: '#64748b', spin: true };
         }
     };
 
-    const getStatusEmoji = () => {
-        switch (status) {
-            case 'error':
-                return '';
-            case 'complete':
-                return '';
-            default:
-                return '';
-        }
-    };
+    const StatusIcon = getStatusInfo().icon;
+    const { text, color, spin } = getStatusInfo();
 
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.content}>
-                {/* Icon */}
-                <Text style={styles.icon}>{getStatusEmoji()}</Text>
+            <View style={styles.card}>
+                {/* Icon Circle */}
+                <View style={[styles.iconCircle, { backgroundColor: `${color}15` }]}>
+                    {spin ? (
+                        <ActivityIndicator size="large" color={color} />
+                    ) : (
+                        <StatusIcon size={48} color={color} />
+                    )}
+                </View>
 
                 {/* Title */}
                 <Text style={styles.title}>อัพเดทแอพพลิเคชัน</Text>
 
                 {/* Status */}
-                <Text style={styles.status}>{getStatusText()}</Text>
+                <Text style={[styles.status, { color }]}>{text}</Text>
 
                 {/* Progress Bar */}
                 {status !== 'error' && status !== 'complete' && (
-                    <View style={styles.progressContainer}>
-                        <View style={styles.progressBar}>
+                    <View style={styles.progressSection}>
+                        <View style={styles.progressBarBg}>
                             <View
                                 style={[
                                     styles.progressFill,
@@ -139,28 +139,26 @@ export default function UpdateScreen({ navigation }) {
                     </View>
                 )}
 
-                {/* Loading indicator */}
-                {status !== 'error' && status !== 'complete' && (
-                    <ActivityIndicator
-                        size="large"
-                        color="#10b981"
-                        style={styles.spinner}
-                    />
-                )}
-
                 {/* Error message */}
                 {status === 'error' && (
                     <View style={styles.errorBox}>
-                        <Text style={styles.errorText}>{errorMsg}</Text>
+                        <Text style={styles.errorText}>{errorMsg || 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้'}</Text>
+                        <TouchableOpacity style={styles.retryButton} onPress={startUpdate}>
+                            <RefreshCw size={16} color="#fff" />
+                            <Text style={styles.retryText}>ลองใหม่อีกครั้ง</Text>
+                        </TouchableOpacity>
                     </View>
                 )}
 
-                {/* Info */}
-                <Text style={styles.infoText}>
-                    {status === 'error'
-                        ? 'กรุณาปิดแอพแล้วเปิดใหม่'
-                        : 'กรุณาอย่าปิดแอพระหว่างอัพเดท'}
-                </Text>
+                {/* Info Text */}
+                <View style={styles.infoContainer}>
+                    <AlertCircle size={14} color="#64748b" style={{ marginTop: 2 }} />
+                    <Text style={styles.infoText}>
+                        {status === 'error'
+                            ? 'กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต'
+                            : 'กรุณาอย่าปิดแอพหรือออกจากหน้านี้ระหว่างการอัพเดท'}
+                    </Text>
+                </View>
             </View>
         </SafeAreaView>
     );
@@ -169,70 +167,118 @@ export default function UpdateScreen({ navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0f172a',
-    },
-    content: {
-        flex: 1,
+        backgroundColor: '#0f172a', // Slate 900
         justifyContent: 'center',
-        alignItems: 'center',
         padding: 24,
     },
-    icon: {
-        fontSize: 64,
+    card: {
+        backgroundColor: '#fff',
+        borderRadius: 24,
+        padding: 32,
+        alignItems: 'center',
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.2,
+                shadowRadius: 20,
+            },
+            android: {
+                elevation: 10,
+            },
+            web: {
+                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+            },
+        }),
+    },
+    iconCircle: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
         marginBottom: 24,
     },
     title: {
-        fontSize: 24,
+        fontSize: 20,
         fontWeight: '700',
-        color: '#fff',
+        color: '#1e293b',
         marginBottom: 8,
     },
     status: {
         fontSize: 16,
-        color: '#94a3b8',
+        fontWeight: '500',
         marginBottom: 32,
     },
-    progressContainer: {
+
+    // Progress
+    progressSection: {
         width: '100%',
-        maxWidth: 300,
         marginBottom: 24,
     },
-    progressBar: {
-        height: 12,
-        backgroundColor: '#1e293b',
-        borderRadius: 6,
+    progressBarBg: {
+        height: 10,
+        backgroundColor: '#f1f5f9',
+        borderRadius: 5,
         overflow: 'hidden',
+        width: '100%',
     },
     progressFill: {
         height: '100%',
         backgroundColor: '#10b981',
-        borderRadius: 6,
+        borderRadius: 5,
     },
     progressText: {
         fontSize: 14,
-        color: '#10b981',
-        textAlign: 'center',
+        color: '#64748b',
+        textAlign: 'right',
         marginTop: 8,
         fontWeight: '600',
     },
-    spinner: {
-        marginTop: 16,
-    },
+
+    // Error
     errorBox: {
+        width: '100%',
         backgroundColor: '#fef2f2',
         padding: 16,
         borderRadius: 12,
-        marginTop: 16,
+        marginBottom: 16,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#fee2e2',
     },
     errorText: {
-        color: '#dc2626',
+        color: '#b91c1c',
         fontSize: 14,
         textAlign: 'center',
+        marginBottom: 12,
+    },
+    retryButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#ef4444',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 8,
+        gap: 8,
+    },
+    retryText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+
+    // Info
+    infoContainer: {
+        flexDirection: 'row',
+        gap: 8,
+        paddingHorizontal: 16,
+        justifyContent: 'center',
     },
     infoText: {
-        fontSize: 12,
+        fontSize: 13,
         color: '#64748b',
-        marginTop: 32,
         textAlign: 'center',
+        lineHeight: 18,
     },
 });

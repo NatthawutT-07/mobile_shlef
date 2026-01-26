@@ -52,17 +52,33 @@ const useShelfUpdateStore = create((set, get) => ({
         }
     },
 
-    // ✅ ดึง history ทั้งหมด (รวม acknowledged) สำหรับเปิด modal
-    fetchAllHistory: async (branchCode) => {
-        if (!branchCode) return;
+    // ✅ ดึง history ทั้งหมด (รวม acknowledged) สำหรับเปิด modal - รองรับ pagination
+    fetchAllHistory: async (branchCode, page = 1, limit = 20, isLoadMore = false) => {
+        if (!branchCode) return { logs: [], total: 0 };
 
         try {
-            const res = await api.get(`/shelf-change-logs/${branchCode}?all=true`);
-            set({
-                changeLogs: res.data?.logs || [],
-            });
+            const res = await api.get(`/shelf-change-logs/${branchCode}?all=true&page=${page}&limit=${limit}`);
+            const newLogs = res.data?.logs || [];
+            const pagination = res.data?.pagination || { total: 0 };
+
+            if (isLoadMore) {
+                // Append unique items
+                set((state) => {
+                    const existingIds = new Set(state.changeLogs.map(log => log.id));
+                    const uniqueNewLogs = newLogs.filter(log => !existingIds.has(log.id));
+                    return {
+                        changeLogs: [...state.changeLogs, ...uniqueNewLogs],
+                    };
+                });
+            } else {
+                // Replace all
+                set({ changeLogs: newLogs });
+            }
+
+            return { logs: newLogs, total: pagination.total };
         } catch (error) {
             console.error('Fetch all history error:', error);
+            return { logs: [], total: 0 };
         }
     },
 

@@ -37,11 +37,13 @@ export const createPogRequest = async (data) => {
 };
 
 /**
- * ดึงประวัติ POG Request ของสาขา
+ * ดึงประวัติ POG Request ของสาขา (รองรับ Pagination)
  * @param {string} branchCode - รหัสสาขา
+ * @param {number} page - หน้าที่ต้องการ (เริ่มที่ 1)
+ * @param {number} limit - จำนวนต่อหน้า
  */
-export const getMyPogRequests = async (branchCode) => {
-    const res = await api.get('/pog-request', { params: { branchCode } });
+export const getMyPogRequests = async (branchCode, page = 1, limit = 20) => {
+    const res = await api.get('/pog-request', { params: { branchCode, page, limit } });
     return res.data;
 };
 

@@ -22,6 +22,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+// Icons
+import {
+    Scan, ClipboardList, Package, Bell, LogOut,
+    ChevronRight, Store, AlertCircle, Check, X,
+    ArrowRightLeft, Plus, Trash2, History
+} from 'lucide-react-native';
+
 // Local imports
 import useAuthStore from '../store/authStore';
 import useUpdateStore from '../store/updateStore';
@@ -128,7 +135,9 @@ export default function HomeScreen({ navigation }) {
     const menuItems = [
         {
             id: 'scanner',
-            icon: '📷',
+            icon: Scan,
+            color: '#10b981', // emerald-500
+            bg: '#ecfdf5', // emerald-50
             title: 'สแกนบาร์โค้ด',
             subtitle: 'ค้นหาสินค้าด้วยกล้อง',
             screen: 'BarcodeScanner',
@@ -136,15 +145,19 @@ export default function HomeScreen({ navigation }) {
         },
         {
             id: 'planogram',
-            icon: '📋',
-            title: 'ดู Planogram',
+            icon: ClipboardList,
+            color: '#3b82f6', // blue-500
+            bg: '#eff6ff', // blue-50
+            title: 'Planogram',
             subtitle: 'ดูโครงสร้างชั้นวางสินค้า',
             screen: 'Planogram',
             enabled: true,
         },
         {
             id: 'requests',
-            icon: '📦',
+            icon: Package,
+            color: '#8b5cf6', // violet-500
+            bg: '#f5f3ff', // violet-50
             title: 'ประวัติคำขอสาขา',
             subtitle: 'ดูและจัดการคำขอเปลี่ยนแปลง',
             screen: 'PogRequests',
@@ -156,7 +169,6 @@ export default function HomeScreen({ navigation }) {
     // Shelf Update Handler
     // -------------------------------------------------------------------------
     const handleShelfUpdatePress = () => {
-        // นำไปหน้า ShelfHistory
         navigation.navigate('ShelfHistory');
     };
 
@@ -197,221 +209,243 @@ export default function HomeScreen({ navigation }) {
     // Render
     // -------------------------------------------------------------------------
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             {/* Header */}
             <View style={styles.header}>
-                <View>
-                    <Text style={styles.storeName}>สาขา {branchName}</Text>
+                <View style={styles.headerLeft}>
+                    <View style={styles.storeIconBg}>
+                        <Store size={20} color="#3b82f6" />
+                    </View>
+                    <View>
+                        <Text style={styles.storeName}>สาขา : {branchName}</Text>
+                    </View>
                 </View>
                 <View style={styles.headerRight}>
                     {/* Update Icon */}
                     {hasUpdate && (
                         <TouchableOpacity
-                            style={styles.updateButton}
+                            style={styles.iconButton}
                             onPress={() => setShowUpdateModal(true)}
                         >
-                            <Text style={styles.updateButtonText}>🔔</Text>
-                            <View style={styles.updateBadge} />
+                            <Bell size={24} color="#64748b" />
+                            <View style={styles.notificationBadge} />
                         </TouchableOpacity>
                     )}
-                    <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                        <Text style={styles.logoutButtonText}>ออก</Text>
+                    <TouchableOpacity style={styles.iconButton} onPress={handleLogout}>
+                        <LogOut size={24} color="#ef4444" />
                     </TouchableOpacity>
                 </View>
             </View>
 
             {/* Main Content */}
-            <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-                <View style={styles.menuSection}>
-                    <Text style={styles.menuTitle}>เมนูหลัก</Text>
+            <ScrollView
+                style={styles.content}
+                contentContainerStyle={styles.contentContainer}
+                showsVerticalScrollIndicator={false}
+            >
+                {/* Banner Section if needed */}
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>เมนูหลัก</Text>
+                </View>
 
+                <View style={styles.grid}>
                     {menuItems.map((item) => (
                         <TouchableOpacity
                             key={item.id}
-                            style={[styles.menuItem, !item.enabled && styles.menuItemDisabled]}
+                            style={[styles.card, !item.enabled && styles.cardDisabled]}
                             onPress={() => handleMenuPress(item)}
                             disabled={!item.enabled}
                             activeOpacity={0.7}
                         >
-                            <View style={styles.menuIcon}>
-                                <Text style={styles.menuIconText}>{item.icon}</Text>
+                            <View style={[styles.iconBox, { backgroundColor: item.bg }]}>
+                                <item.icon size={28} color={item.color} />
                             </View>
-                            <View style={styles.menuInfo}>
-                                <Text style={styles.menuItemTitle}>{item.title}</Text>
-                                <Text
-                                    style={[
-                                        styles.menuItemSubtitle,
-                                        !item.enabled && styles.menuItemSubtitleDisabled,
-                                    ]}
-                                >
-                                    {item.subtitle}
-                                </Text>
+                            <View style={styles.cardContent}>
+                                <Text style={styles.cardTitle}>{item.title}</Text>
+                                <Text style={styles.cardSubtitle}>{item.subtitle}</Text>
                             </View>
-                            {item.enabled && <Text style={styles.menuArrow}>›</Text>}
+                            {item.enabled && <ChevronRight size={20} color="#cbd5e1" />}
                         </TouchableOpacity>
                     ))}
 
-                    {/* ✅ Shelf History Card - แสดงตลอด เข้าดู history ได้ */}
+                    {/* Shelf History Card */}
                     <TouchableOpacity
-                        style={[styles.menuItem, hasShelfUpdate && styles.shelfUpdateCard]}
+                        style={[
+                            styles.card,
+                            hasShelfUpdate && styles.alertCard
+                        ]}
                         onPress={handleShelfUpdatePress}
                         activeOpacity={0.7}
                     >
-                        <View style={[styles.menuIcon, hasShelfUpdate && styles.shelfUpdateIcon]}>
-                            <Text style={styles.menuIconText}>🗂️</Text>
-                            {unacknowledgedCount > 0 && <View style={styles.shelfUpdateBadge} />}
+                        <View style={[
+                            styles.iconBox,
+                            hasShelfUpdate ? styles.alertIconBox : { backgroundColor: '#f1f5f9' }
+                        ]}>
+                            <History size={28} color={hasShelfUpdate ? '#dc2626' : '#64748b'} />
+                            {unacknowledgedCount > 0 && (
+                                <View style={styles.countBadge}>
+                                    <Text style={styles.countBadgeText}>{unacknowledgedCount}</Text>
+                                </View>
+                            )}
                         </View>
-                        <View style={styles.menuInfo}>
-                            <Text style={styles.menuItemTitle}>
-                                {hasShelfUpdate ? 'มีการปรับเปลี่ยนโดยจัดซื้อ' : 'ประวัติการปรับโดยจัดซื้อ'}
+                        <View style={styles.cardContent}>
+                            <Text style={[styles.cardTitle, hasShelfUpdate && styles.alertText]}>
+                                {hasShelfUpdate ? 'มีการปรับเปลี่ยนชั้นวางสินค้า' : 'ประวัติการปรับชั้นวางสินค้า'}
                             </Text>
-                            <Text style={hasShelfUpdate ? styles.shelfUpdateSubtitle : styles.menuItemSubtitle}>
+                            <Text style={[styles.cardSubtitle, hasShelfUpdate && styles.alertSubText]}>
                                 {hasShelfUpdate
-                                    ? `มี ${unacknowledgedCount} รายการที่ต้องรับทราบ`
+                                    ? `รอรับทราบ ${unacknowledgedCount} รายการ`
                                     : 'ดูประวัติการเปลี่ยนแปลงย้อนหลัง'}
                             </Text>
                         </View>
-                        <Text style={[styles.menuArrow, hasShelfUpdate && styles.shelfUpdateArrow]}>›</Text>
+                        <ChevronRight size={20} color={hasShelfUpdate ? '#fecaca' : '#cbd5e1'} />
                     </TouchableOpacity>
                 </View>
+
+                <View style={styles.footerSpacing} />
             </ScrollView>
 
-            {/* Footer */}
+            {/* Footer Version */}
             <View style={styles.footer}>
                 <Text style={styles.footerText}>BMR Planogram v{APP_VERSION}</Text>
             </View>
 
-            {/* Logout Confirmation Modal */}
+            {/* Logout Modal */}
             <Modal visible={showLogoutModal} transparent animationType="fade">
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContainer}>
+                        <View style={[styles.modalIconBg, { backgroundColor: '#fee2e2' }]}>
+                            <LogOut size={32} color="#dc2626" />
+                        </View>
                         <Text style={styles.modalTitle}>ยืนยันออกจากระบบ</Text>
                         <Text style={styles.modalMessage}>คุณต้องการออกจากระบบใช่หรือไม่?</Text>
-
                         <View style={styles.modalButtons}>
                             <TouchableOpacity
-                                style={[styles.modalButton, styles.modalButtonCancel]}
+                                style={[styles.modalButton, styles.btnCancel]}
                                 onPress={() => setShowLogoutModal(false)}
                             >
-                                <Text style={styles.modalButtonTextCancel}>อยู่ต่อ</Text>
+                                <Text style={styles.btnTextCancel}>อยู่ต่อ</Text>
                             </TouchableOpacity>
-
                             <TouchableOpacity
-                                style={[styles.modalButton, styles.modalButtonConfirm]}
+                                style={[styles.modalButton, styles.btnDanger]}
                                 onPress={confirmLogout}
                             >
-                                <Text style={styles.modalButtonTextConfirm}>ออกเลย</Text>
+                                <Text style={styles.btnTextWhite}>ออกเลย</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
                 </View>
             </Modal>
 
-            {/* Update Available Modal */}
+            {/* Update Modal */}
             <Modal visible={showUpdateModal} transparent animationType="fade">
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContainer}>
-                        <Text style={styles.updateIcon}>🔄</Text>
+                        <View style={[styles.modalIconBg, { backgroundColor: '#dcfce7' }]}>
+                            <Package size={32} color="#16a34a" />
+                        </View>
                         <Text style={styles.modalTitle}>มีเวอร์ชั่นใหม่!</Text>
                         <Text style={styles.modalMessage}>
-                            มีการอัพเดทแอพพลิเคชันใหม่{'\n'}
-                            ต้องการอัพเดทตอนนี้เลยหรือไม่?
+                            มีการอัพเดทแอพพลิเคชันเพื่อประสิทธิภาพที่ดีขึ้น
                         </Text>
-
                         <View style={styles.modalButtons}>
                             <TouchableOpacity
-                                style={[styles.modalButton, styles.modalButtonCancel]}
+                                style={[styles.modalButton, styles.btnCancel]}
                                 onPress={handleUpdateLater}
                             >
-                                <Text style={styles.modalButtonTextCancel}>ภายหลัง</Text>
+                                <Text style={styles.btnTextCancel}>ภายหลัง</Text>
                             </TouchableOpacity>
-
                             <TouchableOpacity
-                                style={[styles.modalButton, styles.modalButtonUpdate]}
+                                style={[styles.modalButton, styles.btnSuccess]}
                                 onPress={handleUpdateNow}
                             >
-                                <Text style={styles.modalButtonTextConfirm}>อัพเดทเลย</Text>
+                                <Text style={styles.btnTextWhite}>อัพเดทเลย</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
                 </View>
             </Modal>
 
-            {/* ✅ Shelf Update Modal - แสดงรายละเอียด change logs */}
+            {/* Shelf Update Modal */}
             <Modal visible={showShelfUpdateModal} transparent animationType="fade">
                 <View style={styles.modalOverlay}>
                     <View style={[styles.modalContainer, styles.changeLogModal]}>
-                        <Text style={styles.updateIcon}>📦</Text>
-                        <Text style={styles.modalTitle}>
-                            {unacknowledgedCount > 0
-                                ? `มี ${unacknowledgedCount} รายการที่ต้องรับทราบ`
-                                : 'ประวัติการปรับเปลี่ยน Shelf'}
-                        </Text>
+                        <View style={styles.modalHeader}>
+                            <View style={[styles.modalIconBg, { backgroundColor: '#ffedd5' }]}>
+                                <History size={24} color="#ea580c" />
+                            </View>
+                            <Text style={styles.modalTitle}>
+                                {unacknowledgedCount > 0 ? 'รายการรอรับทราบ' : 'ประวัติการปรับเปลี่ยน'}
+                            </Text>
+                        </View>
 
                         {/* Change Logs List */}
                         {changeLogs.length > 0 ? (
-                            <ScrollView style={styles.changeLogList} nestedScrollEnabled>
+                            <ScrollView style={styles.changeLogList}>
                                 {changeLogs.map((log, idx) => (
                                     <View
                                         key={log.id || idx}
                                         style={[
-                                            styles.changeLogItem,
-                                            log.acknowledged && styles.changeLogItemAcked
+                                            styles.logItem,
+                                            log.acknowledged && styles.logItemAck
                                         ]}
                                     >
-                                        <View style={styles.changeLogInfo}>
-                                            <Text style={styles.changeLogAction}>
-                                                {log.action === 'add' ? '➕' :
-                                                    log.action === 'delete' ? '🗑️' : '↔️'}
-                                            </Text>
-                                            <View style={styles.changeLogTextWrap}>
-                                                <Text style={styles.changeLogProduct} numberOfLines={1}>
-                                                    {log.productName || `รหัส ${log.codeProduct}`}
-                                                </Text>
-                                                <Text style={styles.changeLogPosition}>
-                                                    {log.action === 'add'
-                                                        ? `→ ${log.shelfCode} ชั้น${log.toRow} ลำดับ${log.toIndex}`
-                                                        : log.action === 'delete'
-                                                            ? `${log.shelfCode} ชั้น${log.fromRow} ลำดับ${log.fromIndex}`
-                                                            : `${log.shelfCode} ชั้น${log.fromRow}/${log.fromIndex} → ชั้น${log.toRow}/${log.toIndex}`}
-                                                </Text>
-                                            </View>
+                                        <View style={[styles.logIcon, {
+                                            backgroundColor: log.action === 'add' ? '#dcfce7' : log.action === 'delete' ? '#fee2e2' : '#dbeafe'
+                                        }]}>
+                                            {log.action === 'add' ? <Plus size={16} color="#16a34a" /> :
+                                                log.action === 'delete' ? <Trash2 size={16} color="#dc2626" /> :
+                                                    <ArrowRightLeft size={16} color="#2563eb" />}
                                         </View>
+
+                                        <View style={styles.logContent}>
+                                            <Text style={styles.logProduct} numberOfLines={1}>
+                                                {log.productName || `รหัส ${log.codeProduct}`}
+                                            </Text>
+                                            <Text style={styles.logDetail}>
+                                                {log.action === 'add'
+                                                    ? `เพิ่มที่ ${log.shelfCode} ชั้น ${log.toRow}`
+                                                    : log.action === 'delete'
+                                                        ? `ลบจาก ${log.shelfCode} ชั้น ${log.fromRow}`
+                                                        : `ย้าย ${log.shelfCode} ชั้น ${log.fromRow} → ${log.toRow}`}
+                                            </Text>
+                                        </View>
+
                                         {log.acknowledged ? (
-                                            <View style={styles.changeLogAckedBadge}>
-                                                <Text style={styles.changeLogAckedText}>✓</Text>
+                                            <View style={styles.ackBadge}>
+                                                <Check size={14} color="#16a34a" />
                                             </View>
                                         ) : (
                                             <TouchableOpacity
-                                                style={styles.changeLogAckBtn}
+                                                style={styles.btnAck}
                                                 onPress={() => handleAcknowledgeOne(log.id)}
                                             >
-                                                <Text style={styles.changeLogAckBtnText}>✔</Text>
+                                                <Check size={16} color="#fff" />
                                             </TouchableOpacity>
                                         )}
                                     </View>
                                 ))}
                             </ScrollView>
                         ) : (
-                            <Text style={styles.modalMessage}>
-                                ยังไม่มีประวัติการเปลี่ยนแปลง
-                            </Text>
+                            <View style={styles.emptyState}>
+                                <Text style={styles.emptyText}>ไม่พบรายการเปลี่ยนแปลง</Text>
+                            </View>
                         )}
 
                         <View style={styles.modalButtons}>
                             <TouchableOpacity
-                                style={[styles.modalButton, styles.modalButtonCancel]}
+                                style={[styles.modalButton, styles.btnCancel]}
                                 onPress={() => setShowShelfUpdateModal(false)}
                             >
-                                <Text style={styles.modalButtonTextCancel}>ปิด</Text>
+                                <Text style={styles.btnTextCancel}>ปิด</Text>
                             </TouchableOpacity>
 
                             {changeLogs.length > 0 && (
                                 <TouchableOpacity
-                                    style={[styles.modalButton, styles.modalButtonAcknowledge]}
+                                    style={[styles.modalButton, styles.btnPrimary]}
                                     onPress={handleAcknowledgeAll}
                                 >
-                                    <Text style={styles.modalButtonTextConfirm}>รับทราบทั้งหมด</Text>
+                                    <Text style={styles.btnTextWhite}>รับทราบทั้งหมด</Text>
                                 </TouchableOpacity>
                             )}
                         </View>
@@ -430,9 +464,7 @@ const styles = StyleSheet.create({
     // Layout
     container: {
         flex: 1,
-        backgroundColor: '#f0fdf4',
-        paddingTop: 24,
-        paddingBottom: 16,
+        backgroundColor: '#f8fafc', // slate-50
     },
     content: {
         flex: 1,
@@ -450,11 +482,28 @@ const styles = StyleSheet.create({
         paddingVertical: 16,
         backgroundColor: '#fff',
         borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
+        borderBottomColor: '#f1f5f9',
+    },
+    headerLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    storeIconBg: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        backgroundColor: '#eff6ff', // blue-50
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    greeting: {
+        fontSize: 12,
+        color: '#64748b',
     },
     storeName: {
-        fontSize: 18,
-        fontWeight: '600',
+        fontSize: 14,
+        fontWeight: '700',
         color: '#1e293b',
     },
     headerRight: {
@@ -462,141 +511,186 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 8,
     },
-    updateButton: {
-        position: 'relative',
-        padding: 8,
+    iconButton: {
+        width: 40,
+        height: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: 20,
+        backgroundColor: '#f8fafc',
     },
-    updateButtonText: {
-        fontSize: 22,
-    },
-    updateBadge: {
+    notificationBadge: {
         position: 'absolute',
-        top: 6,
-        right: 6,
-        width: 10,
-        height: 10,
-        borderRadius: 5,
+        top: 8,
+        right: 8,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
         backgroundColor: '#ef4444',
-    },
-    logoutButton: {
-        backgroundColor: '#fef2f2',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 8,
-    },
-    logoutButtonText: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: '#dc2626',
+        borderWidth: 1.5,
+        borderColor: '#fff',
     },
 
-    // Menu Section
-    menuSection: {
-        gap: 12,
+    // Section
+    sectionHeader: {
+        marginBottom: 16,
     },
-    menuTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#374151',
-        marginBottom: 8,
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#334155',
+        letterSpacing: -0.5,
     },
-    menuItem: {
+
+    // Grid/Cards
+    grid: {
+        gap: 16,
+    },
+    card: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#fff',
-        borderRadius: 12,
+        borderRadius: 16,
         padding: 16,
-        marginBottom: 10,
+        borderWidth: 1,
+        borderColor: 'transparent', // Ensure consistent sizing
         ...Platform.select({
-            web: { boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)' },
-            default: {
+            ios: {
                 shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.08,
-                shadowRadius: 3,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.05,
+                shadowRadius: 8,
+            },
+            android: {
                 elevation: 2,
+            },
+            web: {
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
             },
         }),
     },
-    menuItemDisabled: {
-        opacity: 0.5,
-    },
-    menuIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 12,
+    cardDisabled: {
+        opacity: 0.6,
         backgroundColor: '#f1f5f9',
+    },
+    iconBox: {
+        width: 56,
+        height: 56,
+        borderRadius: 14,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 14,
+        marginRight: 16,
+        position: 'relative',
     },
-    menuIconText: {
-        fontSize: 24,
-    },
-    menuInfo: {
+    cardContent: {
         flex: 1,
     },
-    menuItemTitle: {
+    cardTitle: {
         fontSize: 16,
-        fontWeight: '500',
+        fontWeight: '600',
         color: '#1e293b',
+        marginBottom: 4,
     },
-    menuItemSubtitle: {
+    cardSubtitle: {
         fontSize: 13,
         color: '#64748b',
-        marginTop: 2,
+        lineHeight: 18,
     },
-    menuItemSubtitleDisabled: {
-        fontStyle: 'italic',
+
+    // Alert Card Styles
+    alertCard: {
+        backgroundColor: '#fef2f2', // red-50
+        borderWidth: 1,
+        borderColor: '#fee2e2',
     },
-    menuArrow: {
-        fontSize: 24,
-        color: '#9ca3af',
-        marginLeft: 8,
+    alertIconBox: {
+        backgroundColor: '#fee2e2',
+    },
+    alertText: {
+        color: '#b91c1c',
+    },
+    alertSubText: {
+        color: '#dc2626',
+    },
+    countBadge: {
+        position: 'absolute',
+        top: -6,
+        right: -6,
+        backgroundColor: '#ef4444',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 10,
+        borderWidth: 2,
+        borderColor: '#fff',
+    },
+    countBadgeText: {
+        color: '#fff',
+        fontSize: 10,
+        fontWeight: 'bold',
     },
 
     // Footer
+    footerSpacing: {
+        height: 40,
+    },
     footer: {
         padding: 16,
-        paddingBottom: 32,
         alignItems: 'center',
+        backgroundColor: '#f8fafc',
     },
     footerText: {
         fontSize: 12,
-        color: '#9ca3af',
+        color: '#94a3b8',
     },
 
-    // Modal
+    // Modals
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'rgba(15, 23, 42, 0.4)', // slate-900/40
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 20,
+        padding: 24,
     },
     modalContainer: {
         backgroundColor: '#fff',
-        borderRadius: 16,
+        borderRadius: 24,
         padding: 24,
         width: '100%',
-        maxWidth: 320,
+        maxWidth: 340,
         alignItems: 'center',
         ...Platform.select({
-            web: { boxShadow: '0 4px 16px rgba(0,0,0,0.2)' },
-            default: { elevation: 8 },
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.1,
+                shadowRadius: 20,
+            },
+            android: {
+                elevation: 10,
+            },
         }),
     },
+    modalIconBg: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
     modalTitle: {
-        fontSize: 18,
-        fontWeight: '600',
+        fontSize: 20,
+        fontWeight: '700',
         color: '#1e293b',
         marginBottom: 8,
+        textAlign: 'center',
     },
     modalMessage: {
-        fontSize: 14,
+        fontSize: 15,
         color: '#64748b',
         textAlign: 'center',
         marginBottom: 24,
+        lineHeight: 22,
     },
     modalButtons: {
         flexDirection: 'row',
@@ -605,135 +699,101 @@ const styles = StyleSheet.create({
     },
     modalButton: {
         flex: 1,
-        paddingVertical: 12,
-        borderRadius: 8,
+        paddingVertical: 14,
+        borderRadius: 12,
         alignItems: 'center',
     },
-    modalButtonCancel: {
-        backgroundColor: '#f1f5f9',
-    },
-    modalButtonConfirm: {
-        backgroundColor: '#fee2e2',
-    },
-    modalButtonTextCancel: {
+    // Button Styles
+    btnPrimary: { backgroundColor: '#3b82f6' },
+    btnSuccess: { backgroundColor: '#10b981' },
+    btnDanger: { backgroundColor: '#ef4444' },
+    btnCancel: { backgroundColor: '#f1f5f9' },
+
+    btnTextWhite: {
+        color: '#fff',
         fontWeight: '600',
+        fontSize: 15,
+    },
+    btnTextCancel: {
         color: '#64748b',
-    },
-    modalButtonTextConfirm: {
         fontWeight: '600',
-        color: '#dc2626',
-    },
-    updateIcon: {
-        fontSize: 48,
-        marginBottom: 12,
-    },
-    modalButtonUpdate: {
-        backgroundColor: '#10b981',
+        fontSize: 15,
     },
 
-    // ✅ Shelf Update Notification Styles
-    shelfUpdateCard: {
-        backgroundColor: '#fef2f2',
-        borderWidth: 2,
-        borderColor: '#fecaca',
-    },
-    shelfUpdateIcon: {
-        position: 'relative',
-        backgroundColor: '#fee2e2',
-    },
-    shelfUpdateBadge: {
-        position: 'absolute',
-        top: -2,
-        right: -2,
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: '#ef4444',
-        borderWidth: 2,
-        borderColor: '#fff',
-    },
-    shelfUpdateSubtitle: {
-        fontSize: 13,
-        color: '#dc2626',
-        marginTop: 2,
-        fontWeight: '500',
-    },
-    shelfUpdateArrow: {
-        color: '#dc2626',
-    },
-    modalButtonAcknowledge: {
-        backgroundColor: '#10b981',
-    },
-    // ✅ Change Log Modal Styles
+    // Log Modal Specific
     changeLogModal: {
         maxHeight: '70%',
+        padding: 0,
+        overflow: 'hidden',
+    },
+    modalHeader: {
+        alignItems: 'center',
+        paddingTop: 24,
+        paddingHorizontal: 24,
     },
     changeLogList: {
-        maxHeight: 200,
         width: '100%',
-        marginVertical: 12,
+        maxHeight: 240,
+        paddingHorizontal: 20,
+        marginBottom: 20,
     },
-    changeLogItem: {
+    logItem: {
         flexDirection: 'row',
         alignItems: 'center',
+        padding: 12,
         backgroundColor: '#f8fafc',
-        paddingVertical: 8,
-        paddingHorizontal: 10,
+        borderRadius: 12,
+        marginBottom: 8,
+    },
+    logItemAck: {
+        opacity: 0.6,
+        backgroundColor: '#f1f5f9',
+    },
+    logIcon: {
+        width: 32,
+        height: 32,
         borderRadius: 8,
-        marginBottom: 6,
-    },
-    changeLogAction: {
-        fontSize: 14,
-        marginRight: 8,
-    },
-    changeLogInfo: {
-        flex: 1,
-        flexDirection: 'row',
+        justifyContent: 'center',
         alignItems: 'center',
+        marginRight: 12,
     },
-    changeLogTextWrap: {
+    logContent: {
         flex: 1,
     },
-    changeLogProduct: {
-        fontSize: 12,
-        fontWeight: '500',
-        color: '#1e293b',
+    logProduct: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#334155',
     },
-    changeLogPosition: {
-        fontSize: 10,
+    logDetail: {
+        fontSize: 11,
         color: '#64748b',
+        marginTop: 2,
     },
-    changeLogAckBtn: {
+    ackBadge: {
+        marginLeft: 8,
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: '#dcfce7',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    btnAck: {
+        marginLeft: 8,
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: '#10b981',
+        backgroundColor: '#cbd5e1', // inactive gray
         justifyContent: 'center',
         alignItems: 'center',
-        marginLeft: 8,
     },
-    changeLogAckBtnText: {
-        color: '#fff',
-        fontSize: 14,
-        fontWeight: 'bold',
-    },
-    // ✅ Acknowledged item styles
-    changeLogItemAcked: {
-        backgroundColor: '#f0fdf4',
-        opacity: 0.8,
-    },
-    changeLogAckedBadge: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: '#d1fae5',
-        justifyContent: 'center',
+    emptyState: {
+        padding: 32,
         alignItems: 'center',
-        marginLeft: 8,
     },
-    changeLogAckedText: {
-        color: '#10b981',
+    emptyText: {
+        color: '#94a3b8',
         fontSize: 14,
-        fontWeight: 'bold',
     },
 });
