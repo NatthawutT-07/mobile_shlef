@@ -151,6 +151,7 @@ export default function PlanogramScreen({ navigation }) {
             currentRow: product.rowNo,
             currentIndex: product.index,
             productExists: true, // Product already exists, only show move/delete
+            source: 'Planogram', // Tell CreatePogRequestScreen to return here on success
         });
     };
 

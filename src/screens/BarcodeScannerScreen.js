@@ -250,6 +250,14 @@ export default function BarcodeScannerScreen({ navigation, route }) {
         isProcessing.current = false;
     };
 
+    // Navigate back to Home screen (avoid stack buildup)
+    const goToHome = () => {
+        navigation.reset({
+            index: 0,
+            routes: [{ name: 'Home' }],
+        });
+    };
+
     const navigateToRequest = (action) => {
         const params = {
             barcode: result.barcode,
@@ -261,7 +269,8 @@ export default function BarcodeScannerScreen({ navigation, route }) {
             productExists: result.found,
             source: 'BarcodeScanner',
         };
-        navigation.navigate('CreatePogRequest', params);
+        // Use replace to avoid stack buildup when navigating to CreatePogRequest
+        navigation.replace('CreatePogRequest', params);
     };
 
     // -------------------------------------------------------------------------
@@ -282,7 +291,7 @@ export default function BarcodeScannerScreen({ navigation, route }) {
         return (
             <SafeAreaView style={styles.container}>
                 <View style={styles.header}>
-                    <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+                    <TouchableOpacity style={styles.backButton} onPress={goToHome}>
                         <ChevronLeft color="#10b981" size={24} />
                         <Text style={styles.backButtonText}>กลับ</Text>
                     </TouchableOpacity>
@@ -311,7 +320,7 @@ export default function BarcodeScannerScreen({ navigation, route }) {
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+                <TouchableOpacity style={styles.backButton} onPress={goToHome}>
                     <ChevronLeft color="#1e293b" size={24} />
                     <Text style={styles.backButtonText}>กลับ</Text>
                 </TouchableOpacity>

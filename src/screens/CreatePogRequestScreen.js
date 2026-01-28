@@ -290,8 +290,13 @@ export default function CreatePogRequestScreen({ navigation, route }) {
 
     const handleCloseSuccess = () => {
         setSuccess(false);
-        if (route.params?.source === 'BarcodeScanner') {
-            navigation.navigate('BarcodeScanner', { success: true });
+        const source = route.params?.source;
+        if (source === 'BarcodeScanner') {
+            // Use replace to avoid stack buildup - return to scanner with fresh state
+            navigation.replace('BarcodeScanner', { success: true });
+        } else if (source === 'Planogram') {
+            // Go back to Planogram screen
+            navigation.goBack();
         } else {
             navigation.goBack();
         }
@@ -305,7 +310,22 @@ export default function CreatePogRequestScreen({ navigation, route }) {
             >
                 {/* Header */}
                 <View style={styles.header}>
-                    <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+                    <TouchableOpacity style={styles.backButton} onPress={() => {
+                        const source = route.params?.source;
+                        if (source === 'BarcodeScanner') {
+                            // Go back to BarcodeScanner when came from scanner
+                            navigation.replace('BarcodeScanner');
+                        } else if (source === 'Planogram') {
+                            // Go back to Planogram screen
+                            navigation.goBack();
+                        } else {
+                            // Otherwise go to Home to avoid stack buildup
+                            navigation.reset({
+                                index: 0,
+                                routes: [{ name: 'Home' }],
+                            });
+                        }
+                    }}>
                         <ChevronLeft size={24} color="#10b981" />
                         <Text style={styles.backButtonText}>กลับ</Text>
                     </TouchableOpacity>
