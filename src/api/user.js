@@ -65,3 +65,46 @@ export const lookupProduct = async (branchCode, barcode) => {
     const res = await api.get('/lookup', { params: { branchCode, barcode } });
     return res.data;
 };
+
+// =============================================================================
+// ✅ Register Product APIs (ลงทะเบียนสินค้าโดยตรง)
+// =============================================================================
+
+/**
+ * ตรวจสอบสินค้าว่ามีใน planogram หรือยัง
+ * @param {string} branchCode
+ * @param {string} barcode
+ */
+export const checkProductExists = async (branchCode, barcode) => {
+    const res = await api.get('/register/check-product', { params: { branchCode, barcode } });
+    return res.data;
+};
+
+/**
+ * ดึง shelves สำหรับ dropdown
+ * @param {string} branchCode
+ */
+export const getShelvesForRegister = async (branchCode) => {
+    const res = await api.get('/register/shelves', { params: { branchCode } });
+    return res.data;
+};
+
+/**
+ * หา index ถัดไปของ row
+ * @param {string} branchCode
+ * @param {string} shelfCode
+ * @param {number} rowNo
+ */
+export const getNextIndex = async (branchCode, shelfCode, rowNo) => {
+    const res = await api.get('/register/next-index', { params: { branchCode, shelfCode, rowNo } });
+    return res.data;
+};
+
+/**
+ * ลงทะเบียนสินค้าลง DB โดยตรง
+ * @param {object} data - { branchCode, barcode, shelfCode, rowNo }
+ */
+export const registerProduct = async (data) => {
+    const res = await api.post('/register/product', data);
+    return res.data;
+};

@@ -13,6 +13,7 @@ import CreatePogRequestScreen from '../screens/CreatePogRequestScreen';
 import BarcodeScannerScreen from '../screens/BarcodeScannerScreen';
 import UpdateScreen from '../screens/UpdateScreen';
 import ShelfHistoryScreen from '../screens/ShelfHistoryScreen';
+import RegisterProductScreen from '../screens/RegisterProductScreen'; // ✅ NEW
 
 const Stack = createNativeStackNavigator();
 
@@ -84,6 +85,14 @@ function AppStack() {
                 component={ShelfHistoryScreen}
                 options={{
                     animation: 'slide_from_right',
+                }}
+            />
+            {/* ✅ Register Product Screen */}
+            <Stack.Screen
+                name="RegisterProduct"
+                component={RegisterProductScreen}
+                options={{
+                    animation: 'slide_from_bottom',
                 }}
             />
         </Stack.Navigator>

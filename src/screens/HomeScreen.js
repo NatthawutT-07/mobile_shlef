@@ -26,7 +26,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
     Scan, ClipboardList, Package, Bell, LogOut,
     ChevronRight, Store, AlertCircle, Check, X,
-    ArrowRightLeft, Plus, Trash2, History
+    ArrowRightLeft, Plus, Trash2, History, PackagePlus
 } from 'lucide-react-native';
 
 // Local imports
@@ -40,6 +40,9 @@ import { BRANCHES } from '../constants/branches';
 // =============================================================================
 
 const APP_VERSION = '1.0.1';
+
+// ✅ Feature Flag: ลงทะเบียนสินค้าโดยตรง (ตั้งเป็น false เพื่อซ่อนปุ่ม)
+const ENABLE_DIRECT_REGISTER = true;
 
 // =============================================================================
 // MAIN COMPONENT
@@ -141,7 +144,7 @@ export default function HomeScreen({ navigation }) {
             title: 'สแกนบาร์โค้ด',
             subtitle: 'ค้นหาสินค้าด้วยกล้อง',
             screen: 'BarcodeScanner',
-            enabled: true,
+            enabled: false,
         },
         {
             id: 'planogram',
@@ -161,7 +164,7 @@ export default function HomeScreen({ navigation }) {
             title: 'ประวัติคำขอสาขา',
             subtitle: 'ดูและจัดการคำขอเปลี่ยนแปลง',
             screen: 'PogRequests',
-            enabled: true,
+            enabled: false,
         },
     ];
 
@@ -267,6 +270,25 @@ export default function HomeScreen({ navigation }) {
                             {item.enabled && <ChevronRight size={20} color="#cbd5e1" />}
                         </TouchableOpacity>
                     ))}
+
+                    {/* ✅ ปุ่มลงทะเบียนสินค้า - สีเขียวเด่น */}
+                    {ENABLE_DIRECT_REGISTER && (
+                        <TouchableOpacity
+                            style={[styles.card, styles.registerCardMain]}
+                            onPress={() => navigation.navigate('RegisterProduct')}
+                            activeOpacity={0.7}
+                        >
+                            <View style={[styles.iconBox, styles.registerIconBox]}>
+                                <PackagePlus size={28} color="#fff" />
+                            </View>
+                            <View style={styles.cardContent}>
+                                <Text style={[styles.cardTitle, { color: '#fff' }]}>ลงทะเบียนสินค้า</Text>
+                                <Text style={[styles.cardSubtitle, { color: 'rgba(255,255,255,0.8)' }]}>สแกนบาร์โค้ดเพื่อเพิ่มสินค้าใหม่</Text>
+                            </View>
+                            <ChevronRight size={20} color="rgba(255,255,255,0.6)" />
+                        </TouchableOpacity>
+                    )}
+
 
                     {/* Shelf History Card */}
                     <TouchableOpacity
@@ -602,6 +624,13 @@ const styles = StyleSheet.create({
         backgroundColor: '#fef2f2', // red-50
         borderWidth: 1,
         borderColor: '#fee2e2',
+    },
+    // ✅ Register Card Style - สีเขียวเด่น
+    registerCardMain: {
+        backgroundColor: '#10b981',
+    },
+    registerIconBox: {
+        backgroundColor: 'rgba(255,255,255,0.2)',
     },
     alertIconBox: {
         backgroundColor: '#fee2e2',

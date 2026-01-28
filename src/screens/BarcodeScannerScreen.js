@@ -391,6 +391,15 @@ export default function BarcodeScannerScreen({ navigation, route }) {
                             <Text style={styles.scanHint}>วางบาร์โค้ดในกรอบเพื่อสแกน</Text>
                         </View>
                     </View>
+
+                    {/* ปุ่มพิมพ์บาร์โค้ด - อยู่ใต้กล้อง */}
+                    <TouchableOpacity
+                        style={styles.manualInputButton}
+                        onPress={() => setShowManualInput(true)}
+                    >
+                        <Keyboard size={20} color="#fff" />
+                        <Text style={styles.manualInputButtonText}>พิมพ์บาร์โค้ด</Text>
+                    </TouchableOpacity>
                 </View>
             )}
 
@@ -640,7 +649,6 @@ const styles = StyleSheet.create({
     overlayCenter: {
         flexDirection: 'row',
         height: SCAN_FRAME_SIZE,
-        top: -40, // Move frame up slightly
     },
     overlaySide: {
         flex: 1,
@@ -689,6 +697,24 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         borderRadius: 20,
         overflow: 'hidden',
+    },
+    // ปุ่มพิมพ์บาร์โค้ด
+    manualInputButton: {
+        position: 'absolute',
+        bottom: 32,
+        alignSelf: 'center',
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        borderRadius: 24,
+        gap: 8,
+    },
+    manualInputButtonText: {
+        color: '#fff',
+        fontWeight: '600',
+        fontSize: 14,
     },
 
     // Result Panel (Bottom Sheet style)

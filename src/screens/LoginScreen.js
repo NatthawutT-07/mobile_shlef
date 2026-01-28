@@ -87,7 +87,6 @@ export default function LoginScreen({ navigation }) {
                             />
                         </View>
                         <Text style={styles.appName}>BMR Planogram</Text>
-                        <Text style={styles.appSubtitle}>ระบบจัดการชั้นวางสินค้า</Text>
                     </View>
 
                     {/* Login Card */}
@@ -228,9 +227,9 @@ export default function LoginScreen({ navigation }) {
                         ) : null}
                     </View>
 
-                    <Text style={styles.operatingHours}>
+                    {/* <Text style={styles.operatingHours}>
                         🕒 เวลาทำการระบบ 08.30 - 18.00 น.
-                    </Text>
+                    </Text> */}
 
                     {/* Footer */}
                     <Text style={styles.footer}>BMR Planogram v1.0.1</Text>

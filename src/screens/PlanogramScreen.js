@@ -222,12 +222,12 @@ export default function PlanogramScreen({ navigation }) {
                                                 </View>
 
                                                 {/* Edit Button */}
-                                                <TouchableOpacity
+                                                {/* <TouchableOpacity
                                                     style={styles.editButton}
                                                     onPress={() => handleRequestAction(product)}
                                                 >
                                                     <Edit size={16} color="#64748b" />
-                                                </TouchableOpacity>
+                                                </TouchableOpacity> */}
                                             </View>
                                         </View>
                                     ))}
