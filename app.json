@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "Planogram",
+    "slug": "mobile-bmr",
+    "version": "1.0.1",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.bmr.pogmobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": [
+        "CAMERA",
+        "android.permission.CAMERA"
+      ],
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-camera"
+    ],
+    "updates": {
+      "enabled": true,
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/40aeef43-1033-4b2d-af2c-9f528390bdf9"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "40aeef43-1033-4b2d-af2c-9f528390bdf9"
+      }
+    }
+  }
+}
