@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-    ChevronLeft, CheckCircle2, AlertCircle,
+    ChevronLeft, ChevronRight, CheckCircle2, AlertCircle,
     Plus, Trash2, ArrowRightLeft, Package,
     Clock, Check
 } from 'lucide-react-native';
@@ -59,12 +59,13 @@ export default function ShelfHistoryScreen({ navigation }) {
 
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [loadingMore, setLoadingMore] = useState(false);
     const [ackingId, setAckingId] = useState(null);
     const [page, setPage] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
-    const [hasMore, setHasMore] = useState(true);
-    const hasMoreRef = useRef(true);
+
+    const ITEMS_PER_PAGE = 15;
+    const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
+    const flatListRef = useRef(null);
 
     const getBranchName = useBranchStore((s) => s.getBranchName);
 
@@ -73,53 +74,34 @@ export default function ShelfHistoryScreen({ navigation }) {
         return getBranchName(storecode);
     }, [storecode, getBranchName]);
 
-    const loadData = useCallback(async (isRefresh = false, isLoadMore = false) => {
+    const loadPage = useCallback(async (targetPage, isRefresh = false) => {
         if (!storecode) return;
-        if (!hasMoreRef.current && isLoadMore) return;
-        if (loadingMore) return;
 
-        const targetPage = isRefresh ? 1 : (isLoadMore ? page + 1 : 1);
-        const limit = 20;
-
-        if (isRefresh) {
-            setRefreshing(true);
-            setHasMore(true);
-            hasMoreRef.current = true;
-        } else if (isLoadMore) {
-            setLoadingMore(true);
-        } else {
-            setLoading(true);
-        }
+        if (isRefresh) setRefreshing(true);
+        else setLoading(true);
 
         try {
-            const result = await fetchAllHistory(storecode, targetPage, limit, isLoadMore);
-            const { logs: newLogs, total } = result;
-
+            const result = await fetchAllHistory(storecode, targetPage, ITEMS_PER_PAGE, false);
+            const { total } = result;
             setTotalCount(total);
-            if (!isLoadMore) setPage(1);
-            else setPage(targetPage);
-
-            // Check if all data loaded
-            const currentTotal = isLoadMore ? changeLogs.length + newLogs.length : newLogs.length;
-            if (currentTotal >= total || newLogs.length < limit) {
-                setHasMore(false);
-                hasMoreRef.current = false;
-            } else {
-                setHasMore(true);
-                hasMoreRef.current = true;
-            }
+            setPage(targetPage);
         } catch (err) {
             if (__DEV__) console.error('Load shelf history error:', err);
         } finally {
             setLoading(false);
             setRefreshing(false);
-            setLoadingMore(false);
         }
-    }, [storecode, fetchAllHistory, page, changeLogs.length, loadingMore]);
+    }, [storecode, fetchAllHistory]);
 
     useEffect(() => {
-        loadData();
-    }, [loadData]);
+        loadPage(1);
+    }, [storecode]);
+
+    const goToPage = (targetPage) => {
+        if (targetPage < 1 || targetPage > totalPages || targetPage === page) return;
+        flatListRef.current?.scrollToOffset?.({ offset: 0, animated: false });
+        loadPage(targetPage);
+    };
 
     const handleAcknowledgeOne = async (logId) => {
         if (logId && storecode) {
@@ -142,6 +124,9 @@ export default function ShelfHistoryScreen({ navigation }) {
         // Timeline connector
         const isLastItem = index === changeLogs.length - 1;
 
+        // Global item number across pages
+        const globalIndex = (page - 1) * ITEMS_PER_PAGE + index + 1;
+
         return (
             <View style={styles.timelineItem}>
                 {/* Timeline Line */}
@@ -156,14 +141,13 @@ export default function ShelfHistoryScreen({ navigation }) {
                 <View style={[styles.card, item.acknowledged && styles.cardAcked]}>
                     <View style={styles.cardHeader}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                            <Text style={{ fontSize: 12, fontWeight: '700', color: '#64748b' }}>#{index + 1}</Text>
+                            <Text style={{ fontSize: 12, fontWeight: '700', color: '#64748b' }}>#{globalIndex}</Text>
                             <View style={[styles.actionBadge, { backgroundColor: actionConf.bg }]}>
                                 <Text style={[styles.actionText, { color: actionConf.color }]}>
                                     {actionConf.label}
                                 </Text>
                             </View>
                         </View>
-                        <Text style={styles.shelfCode}>{item.shelfCode}</Text>
                     </View>
 
                     <View style={styles.productRow}>
@@ -177,17 +161,16 @@ export default function ShelfHistoryScreen({ navigation }) {
                         <View style={styles.descRow}>
                             {item.action === 'add' ? (
                                 <Text style={styles.descText}>
-                                    เพิ่มที่ <Text style={styles.highlight}>ชั้น {item.toRow} ลำดับ {item.toIndex}</Text>
+                                    เพิ่มที่ <Text style={styles.highlight}>ชั้นวาง {item.toShelf || item.shelfCode} ชั้นที่ {item.toRow} ลำดับ {item.toIndex}</Text>
                                 </Text>
                             ) : item.action === 'delete' ? (
                                 <Text style={styles.descText}>
-                                    ลบจาก <Text style={styles.highlight}>ชั้น {item.fromRow} ลำดับ {item.fromIndex}</Text>
+                                    ลบจาก <Text style={styles.highlight}>ชั้นวาง {item.fromShelf || item.shelfCode} ชั้นที่ {item.fromRow} ลำดับ {item.fromIndex}</Text>
                                 </Text>
                             ) : (
                                 <Text style={styles.descText}>
-                                    จาก <Text style={styles.highlight}>ชั้น {item.fromRow} ({item.fromIndex})</Text>
-                                    {' '}ไป{' '}
-                                    <Text style={styles.highlight}>ชั้น {item.toRow} ({item.toIndex})</Text>
+                                    จาก <Text style={styles.highlight}>ชั้นวาง {item.fromShelf || item.shelfCode} ชั้นที่ {item.fromRow} (ลำดับ {item.fromIndex})</Text>
+                                    {'\n'}ไป <Text style={styles.highlight}>ชั้นวาง {item.toShelf || item.shelfCode} ชั้นที่ {item.toRow} (ลำดับ {item.toIndex})</Text>
                                 </Text>
                             )}
                         </View>
@@ -231,9 +214,9 @@ export default function ShelfHistoryScreen({ navigation }) {
                     <Text style={styles.backButtonText}>กลับ</Text>
                 </TouchableOpacity>
                 <View style={styles.headerInfo}>
-                    <Text style={styles.title}>ประวัติการปรับ Planogram</Text>
+                    <Text style={styles.title}>ปรับตำแหน่งสินค้า</Text>
                     <Text style={styles.subtitle}>
-                        {branchName} ({changeLogs.length})
+                        {branchName} ({totalCount})
                     </Text>
                 </View>
             </View>
@@ -268,6 +251,7 @@ export default function ShelfHistoryScreen({ navigation }) {
                 </View>
             ) : (
                 <FlatList
+                    ref={flatListRef}
                     data={changeLogs}
                     keyExtractor={(item) => String(item.id)}
                     renderItem={renderLogItem}
@@ -276,36 +260,42 @@ export default function ShelfHistoryScreen({ navigation }) {
                     refreshControl={
                         <RefreshControl
                             refreshing={refreshing}
-                            onRefresh={() => loadData(true)}
+                            onRefresh={() => loadPage(page, true)}
                             tintColor="#10b981"
                         />
-                    }
-                    onEndReached={() => {
-                        if (hasMoreRef.current && !loading && !loadingMore) {
-                            loadData(false, true);
-                        }
-                    }}
-                    onEndReachedThreshold={0.1}
-                    ListFooterComponent={
-                        loadingMore ? (
-                            <View style={{ paddingVertical: 20 }}>
-                                <ActivityIndicator size="small" color="#94a3b8" />
-                            </View>
-                        ) : (
-                            !hasMore && changeLogs.length > 0 ? (
-                                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-                                    <Text style={{ color: '#94a3b8', fontSize: 12 }}>--- ครบถ้วน ---</Text>
-                                </View>
-                            ) : null
-                        )
                     }
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>
                             <CheckCircle2 size={48} color="#cbd5e1" />
-                            <Text style={styles.emptyText}>ไม่มีประวัติการเปลี่ยนแปลง</Text>
+                            <Text style={styles.emptyText}>ไม่มีรายการรอรับทราบ</Text>
                         </View>
                     }
                 />
+            )}
+
+            {/* Pagination Footer */}
+            {!loading && totalCount > 0 && (
+                <View style={styles.paginationBar}>
+                    <TouchableOpacity
+                        style={[styles.pageButton, page <= 1 && styles.pageButtonDisabled]}
+                        onPress={() => goToPage(page - 1)}
+                        disabled={page <= 1}
+                    >
+                        <ChevronLeft size={18} color={page <= 1 ? '#cbd5e1' : '#1e293b'} />
+                        <Text style={[styles.pageButtonText, page <= 1 && styles.pageButtonTextDisabled]}>ก่อนหน้า</Text>
+                    </TouchableOpacity>
+
+                    <Text style={styles.pageInfo}>หน้า {page}/{totalPages}</Text>
+
+                    <TouchableOpacity
+                        style={[styles.pageButton, page >= totalPages && styles.pageButtonDisabled]}
+                        onPress={() => goToPage(page + 1)}
+                        disabled={page >= totalPages}
+                    >
+                        <Text style={[styles.pageButtonText, page >= totalPages && styles.pageButtonTextDisabled]}>ถัดไป</Text>
+                        <ChevronRight size={18} color={page >= totalPages ? '#cbd5e1' : '#1e293b'} />
+                    </TouchableOpacity>
+                </View>
             )}
         </SafeAreaView>
     );
@@ -562,6 +552,45 @@ const styles = StyleSheet.create({
     emptyText: {
         marginTop: 16,
         fontSize: 14,
+        color: '#64748b',
+    },
+
+    // Pagination
+    paginationBar: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        backgroundColor: '#fff',
+        borderTopWidth: 1,
+        borderTopColor: '#f1f5f9',
+    },
+    pageButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 8,
+        backgroundColor: '#f1f5f9',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    pageButtonDisabled: {
+        opacity: 0.4,
+    },
+    pageButtonText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#1e293b',
+    },
+    pageButtonTextDisabled: {
+        color: '#cbd5e1',
+    },
+    pageInfo: {
+        fontSize: 13,
+        fontWeight: '600',
         color: '#64748b',
     },
 });

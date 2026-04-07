@@ -62,10 +62,11 @@ const formatBangkokTime = (value) => {
     const d = new Date(value);
     if (isNaN(d.getTime())) return '-';
 
-    // Add 7 hours for Bangkok timezone (UTC+7)
+    // Add 7 hours for Bangkok timezone (UTC+7) + additional 7 hours
     const bangkokOffset = 7 * 60 * 60 * 1000;
+    const additionalOffset = 7 * 60 * 60 * 1000;
     const utc = d.getTime() + (d.getTimezoneOffset() * 60 * 1000);
-    const bangkokTime = new Date(utc + bangkokOffset);
+    const bangkokTime = new Date(utc + bangkokOffset + additionalOffset);
 
     const day = String(bangkokTime.getDate()).padStart(2, '0');
     const month = String(bangkokTime.getMonth() + 1).padStart(2, '0');
@@ -168,17 +169,20 @@ export default function PlanogramScreen({ navigation }) {
         const q = searchText.trim().toLowerCase();
         if (!q) return shelves;
 
-        return shelves.filter((shelf) => {
-            if (shelf.shelfCode.toLowerCase().includes(q)) return true;
-            if (shelf.fullName.toLowerCase().includes(q)) return true;
-
-            return shelf.products.some(
-                (p) =>
-                    String(p.barcode || '').includes(q) ||
-                    String(p.nameBrand || '').toLowerCase().includes(q) ||
-                    String(p.nameProduct || '').toLowerCase().includes(q)
+        // คืนค่าเฉพาะ Shelf ที่มีสินค้าตรงกับบาร์โค้ดหรือชื่อ
+        return shelves.map(shelf => {
+            const matchedProducts = shelf.products.filter(p => 
+                String(p.barcode || '').includes(q) ||
+                String(p.nameBrand || '').toLowerCase().includes(q) ||
+                String(p.nameProduct || '').toLowerCase().includes(q)
             );
-        });
+            
+            // ส่งคืนโครงสร้างของชั้น แต่เก็บไว้เฉพาะสินค้าที่ตรงเงื่อนไขการค้นหา
+            return {
+                ...shelf,
+                products: matchedProducts
+            };
+        }).filter(shelf => shelf.products.length > 0);
     }, [shelves, searchText]);
 
     // Handle request action
@@ -246,18 +250,28 @@ export default function PlanogramScreen({ navigation }) {
                                                     <Text style={styles.indexText}>{product.index || pIdx + 1}</Text>
                                                 </View>
 
-                                                {/* Product Info */}
-                                                <View style={styles.productMainInfo}>
-                                                    <Text style={styles.productName} numberOfLines={2}>
-                                                        {product.nameProduct || product.nameBrand || '-'}
-                                                    </Text>
-                                                    <Text style={styles.productBarcode}>{product.barcode}</Text>
-                                                </View>
+                                                {/* Content Wrapper */}
+                                                <View style={styles.productContentWrapper}>
+                                                    {/* Top Info: Name & Price */}
+                                                    <View style={styles.productTopRow}>
+                                                        <Text style={styles.productName} numberOfLines={2}>
+                                                            {product.nameProduct || product.nameBrand || '-'}
+                                                        </Text>
+                                                        <Text style={styles.priceText}>฿{formatValue(product.salesPriceIncVAT)}</Text>
+                                                    </View>
 
-                                                {/* Quick Stats */}
-                                                <View style={styles.quickStats}>
-                                                    <Text style={styles.priceText}>฿{formatValue(product.salesPriceIncVAT)}</Text>
-                                                    <Text style={styles.stockText}>สต็อค {formatValue(product.stockQuantity)}</Text>
+                                                    {/* Bottom Info: Barcode, Min/Max, Stock */}
+                                                    <View style={styles.productBottomRow}>
+                                                        <Text style={styles.productBarcode}>{product.barcode}</Text>
+                                                        
+                                                        <View style={styles.minMaxRow}>
+                                                            <Text style={styles.minMaxText}>Min {formatValue(product.minStore)}</Text>
+                                                            <Text style={styles.minMaxDivider}>|</Text>
+                                                            <Text style={styles.minMaxText}>Max {formatValue(product.maxStore)}</Text>
+                                                        </View>
+                                                        
+                                                        <Text style={styles.stockText}>สต็อค {formatValue(product.stockQuantity)}</Text>
+                                                    </View>
                                                 </View>
 
                                                 {/* Edit Button */}
@@ -323,7 +337,7 @@ export default function PlanogramScreen({ navigation }) {
                     <Search size={20} color="#94a3b8" style={styles.searchIcon} />
                     <TextInput
                         style={styles.searchInput}
-                        placeholder="ค้นหา Shelf, บาร์โค้ด หรือชื่อสินค้า..."
+                        placeholder="ค้นหาบาร์โค้ด หรือชื่อสินค้า..."
                         placeholderTextColor="#94a3b8"
                         value={searchText}
                         onChangeText={setSearchText}
@@ -623,10 +637,23 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#64748b',
     },
-    productMainInfo: {
+    productContentWrapper: {
         flex: 1,
+        gap: 4,
+    },
+    productTopRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        gap: 8,
+    },
+    productBottomRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
     productName: {
+        flex: 1,
         fontSize: 13,
         fontWeight: '500',
         color: '#1e293b',
@@ -635,20 +662,29 @@ const styles = StyleSheet.create({
     productBarcode: {
         fontSize: 11,
         color: '#94a3b8',
-        marginTop: 2,
         fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     },
-    quickStats: {
-        alignItems: 'flex-end',
-    },
     priceText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: '#10b981',
+        fontSize: 12,
+        color: '#64748b',
     },
-    stockText: {
+    minMaxRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    minMaxText: {
         fontSize: 10,
         color: '#64748b',
+    },
+    minMaxDivider: {
+        fontSize: 10,
+        color: '#cbd5e1',
+        marginHorizontal: 4,
+    },
+    stockText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#10b981',
     },
     editButton: {
         width: 32,

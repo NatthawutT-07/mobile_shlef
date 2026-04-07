@@ -321,12 +321,12 @@ export default function HomeScreen({ navigation }) {
                         </View>
                         <View style={styles.cardContent}>
                             <Text style={[styles.cardTitle, hasShelfUpdate && styles.alertText]}>
-                                {hasShelfUpdate ? 'มีการปรับเปลี่ยนชั้นวางสินค้า' : 'ประวัติการปรับชั้นวางสินค้า'}
+                                {hasShelfUpdate ? 'เปลี่ยนตำแหน่งสินค้าจากส่วนกลาง' : 'ปรับตำแหน่งสินค้า'}
                             </Text>
                             <Text style={[styles.cardSubtitle, hasShelfUpdate && styles.alertSubText]}>
                                 {hasShelfUpdate
                                     ? `รอรับทราบ ${unacknowledgedCount} รายการ`
-                                    : 'ดูประวัติการเปลี่ยนแปลงย้อนหลัง'}
+                                    : 'ปรับเปลี่ยนจากส่วนกลาง'}
                             </Text>
                         </View>
                         <ChevronRight size={20} color={hasShelfUpdate ? '#fecaca' : '#cbd5e1'} />

@@ -18,9 +18,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-    ChevronLeft, Clock, CheckCircle2, XCircle,
+    ChevronLeft, ChevronRight, Clock, CheckCircle2, XCircle,
     AlertTriangle, Trash2, ArrowRightLeft, Plus,
-    Calendar, MapPin
+    Calendar, MapPin, FileText
 } from 'lucide-react-native';
 
 import useAuthStore from '../store/authStore';
@@ -76,13 +76,14 @@ export default function PogRequestsScreen({ navigation }) {
 
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [loadingMore, setLoadingMore] = useState(false);
     const [data, setData] = useState([]);
     const [page, setPage] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
-    const [hasMore, setHasMore] = useState(true);
-    const hasMoreRef = useRef(true); // Ref for synchronous check
     const [cancellingId, setCancellingId] = useState(null);
+
+    const ITEMS_PER_PAGE = 15;
+    const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
+    const flatListRef = useRef(null);
 
     // Modal state
     const [showCancelModal, setShowCancelModal] = useState(false);
@@ -99,66 +100,34 @@ export default function PogRequestsScreen({ navigation }) {
         return getBranchName(storecode);
     }, [storecode, getBranchName]);
 
-    const loadData = useCallback(async (isRefresh = false, isLoadMore = false) => {
+    const loadPage = useCallback(async (targetPage, isRefresh = false) => {
         if (!storecode) return;
-        if (!hasMore && isLoadMore) return;
-        if (loadingMore) return;
 
-        const targetPage = isRefresh ? 1 : (isLoadMore ? page + 1 : 1);
-        const limit = 20;
         const cacheKey = CACHE_KEYS.POG_REQUESTS(storecode);
 
-        if (isRefresh) {
-            setRefreshing(true);
-            setHasMore(true);
-            hasMoreRef.current = true;
-        } else if (isLoadMore) {
-            setLoadingMore(true);
-        } else {
-            setLoading(true);
-        }
+        if (isRefresh) setRefreshing(true);
+        else setLoading(true);
 
         // Try network first if online
         if (isOnline) {
             try {
-                const result = await getMyPogRequests(storecode, targetPage, limit);
+                const result = await getMyPogRequests(storecode, targetPage, ITEMS_PER_PAGE);
                 const newData = result?.data || [];
+                const total = result?.pagination?.total || 0;
 
-                if (isRefresh || (!isLoadMore)) {
-                    setData(newData);
-                    setPage(1);
-                    // Cache first page data
-                    await setCache(cacheKey, { data: newData, total: result?.pagination?.total || 0 });
-                } else {
-                    setData(prev => {
-                        const existingIds = new Set(prev.map(item => item.id));
-                        const uniqueNewData = newData.filter(item => !existingIds.has(item.id));
-                        return [...prev, ...uniqueNewData];
-                    });
-                    setPage(targetPage);
-                }
-
+                setData(newData);
+                setPage(targetPage);
+                setTotalCount(total);
                 setIsOfflineData(false);
                 setCachedAt(null);
 
-                const total = result?.pagination?.total || 0;
-                setTotalCount(total);
-
-                const currentTotal = isRefresh || !isLoadMore
-                    ? newData.length
-                    : data.length + newData.filter(item => !new Set(data.map(d => d.id)).has(item.id)).length;
-
-                if (currentTotal >= total || newData.length < limit) {
-                    setHasMore(false);
-                    hasMoreRef.current = false;
-                } else {
-                    setHasMore(true);
-                    hasMoreRef.current = true;
+                // Cache page 1 data for offline use
+                if (targetPage === 1) {
+                    await setCache(cacheKey, { data: newData, total });
                 }
 
                 setLoading(false);
                 setRefreshing(false);
-                setLoadingMore(false);
                 return;
             } catch (err) {
                 if (__DEV__) console.error('Load POG requests error:', err);
@@ -166,29 +135,30 @@ export default function PogRequestsScreen({ navigation }) {
             }
         }
 
-        // Load from cache (offline or network failed) - only for initial/refresh load
-        if (!isLoadMore) {
-            const cached = await getCacheWithMeta(cacheKey);
-            if (cached.data) {
-                setData(cached.data.data || []);
-                setTotalCount(cached.data.total || 0);
-                setCachedAt(cached.cachedAt);
-                setIsOfflineData(true);
-                setHasMore(false);
-                hasMoreRef.current = false;
-            } else {
-                setData([]);
-            }
+        // Load from cache (offline or network failed) - only show cache for page 1 conceptually
+        const cached = await getCacheWithMeta(cacheKey);
+        if (cached.data) {
+            setData(cached.data.data || []);
+            setTotalCount(cached.data.total || 0);
+            setCachedAt(cached.cachedAt);
+            setIsOfflineData(true);
+        } else {
+            setData([]);
         }
 
         setLoading(false);
         setRefreshing(false);
-        setLoadingMore(false);
-    }, [storecode, isOnline, hasMore, loadingMore, page, data]);
+    }, [storecode, isOnline]);
 
     useEffect(() => {
-        loadData();
+        loadPage(1);
     }, [storecode]);
+
+    const goToPage = (targetPage) => {
+        if (targetPage < 1 || targetPage > totalPages || targetPage === page) return;
+        flatListRef.current?.scrollToOffset?.({ offset: 0, animated: false });
+        loadPage(targetPage);
+    };
 
     const handleCancelPress = (id) => {
         setTargetCancelId(id);
@@ -236,17 +206,35 @@ export default function PogRequestsScreen({ navigation }) {
                 {/* Header: Index, Action & Status */}
                 <View style={styles.cardHeader}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#64748b' }}>#{index + 1}</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#64748b' }}>
+                            #{(page - 1) * ITEMS_PER_PAGE + index + 1}
+                        </Text>
                         <View style={[styles.actionBadge, { backgroundColor: actionInfo.bg }]}>
                             <ActionIcon size={14} color={actionInfo.color} />
                             <Text style={[styles.actionText, { color: actionInfo.color }]}>{actionInfo.label}</Text>
                         </View>
                     </View>
-                    <View style={[styles.statusBadge, { backgroundColor: statusInfo.bgColor }]}>
-                        <StatusIcon size={12} color={statusInfo.textColor} />
-                        <Text style={[styles.statusText, { color: statusInfo.textColor }]}>
-                            {statusInfo.label}
-                        </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View style={[styles.statusBadge, { backgroundColor: statusInfo.bgColor }]}>
+                            <StatusIcon size={12} color={statusInfo.textColor} />
+                            <Text style={[styles.statusText, { color: statusInfo.textColor }]}>
+                                {statusInfo.label}
+                            </Text>
+                        </View>
+                        {item.status === 'pending' && (
+                            <TouchableOpacity
+                                style={styles.cancelButton}
+                                onPress={() => handleCancelPress(item.id)}
+                                disabled={cancellingId === item.id}
+                            >
+                                {cancellingId === item.id ? (
+                                    <ActivityIndicator size="small" color="#dc2626" />
+                                ) : (
+                                    <Text style={styles.cancelButtonText}>ยกเลิกคำขอ</Text>
+                                )}
+                            </TouchableOpacity>
+                        )}
+
                     </View>
                 </View>
 
@@ -272,24 +260,16 @@ export default function PogRequestsScreen({ navigation }) {
                         <Calendar size={14} color="#94a3b8" />
                         <Text style={styles.dateText}>{formatDate(item.createdAt)}</Text>
                     </View>
+                    {!!item.note && (
+                        <View style={styles.noteRow}>
+                            <FileText size={14} color="#94a3b8" style={{ marginTop: 2 }} />
+                            <Text style={styles.noteText} numberOfLines={2}>
+                                {item.note}
+                            </Text>
+                        </View>
+                    )}
                 </View>
 
-                {/* Cancel Button (Only if pending) */}
-                {item.status === 'pending' && (
-                    <View style={styles.cardFooter}>
-                        <TouchableOpacity
-                            style={styles.cancelButton}
-                            onPress={() => handleCancelPress(item.id)}
-                            disabled={cancellingId === item.id}
-                        >
-                            {cancellingId === item.id ? (
-                                <ActivityIndicator size="small" color="#dc2626" />
-                            ) : (
-                                <Text style={styles.cancelButtonText}>ยกเลิกคำขอ</Text>
-                            )}
-                        </TouchableOpacity>
-                    </View>
-                )}
             </View>
         );
     };
@@ -308,7 +288,7 @@ export default function PogRequestsScreen({ navigation }) {
                 <View style={styles.headerInfo}>
                     <Text style={styles.title}>ประวัติคำขอ</Text>
                     <Text style={styles.subtitle}>
-                        {branchName} • {data.length} รายการ
+                        {branchName} • {totalCount} รายการ
                     </Text>
                 </View>
             </View>
@@ -326,6 +306,7 @@ export default function PogRequestsScreen({ navigation }) {
                 </View>
             ) : (
                 <FlatList
+                    ref={flatListRef}
                     data={data}
                     keyExtractor={(item) => String(item.id)}
                     renderItem={renderRequestItem}
@@ -334,28 +315,9 @@ export default function PogRequestsScreen({ navigation }) {
                     refreshControl={
                         <RefreshControl
                             refreshing={refreshing}
-                            onRefresh={() => loadData(true)}
+                            onRefresh={() => loadPage(page, true)}
                             tintColor="#10b981"
                         />
-                    }
-                    onEndReached={() => {
-                        if (hasMoreRef.current && !loading && !loadingMore) {
-                            loadData(false, true);
-                        }
-                    }}
-                    onEndReachedThreshold={0.1}
-                    ListFooterComponent={
-                        loadingMore ? (
-                            <View style={{ paddingVertical: 20 }}>
-                                <ActivityIndicator size="small" color="#94a3b8" />
-                            </View>
-                        ) : (
-                            !hasMore && data.length > 0 ? (
-                                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-                                    <Text style={{ color: '#94a3b8', fontSize: 12 }}>--- ครบถ้วน ---</Text>
-                                </View>
-                            ) : null
-                        )
                     }
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>
@@ -364,6 +326,31 @@ export default function PogRequestsScreen({ navigation }) {
                         </View>
                     }
                 />
+            )}
+
+            {/* Pagination Footer */}
+            {!loading && totalCount > 0 && (
+                <View style={styles.paginationBar}>
+                    <TouchableOpacity
+                        style={[styles.pageButton, page <= 1 && styles.pageButtonDisabled]}
+                        onPress={() => goToPage(page - 1)}
+                        disabled={page <= 1}
+                    >
+                        <ChevronLeft size={18} color={page <= 1 ? '#cbd5e1' : '#1e293b'} />
+                        <Text style={[styles.pageButtonText, page <= 1 && styles.pageButtonTextDisabled]}>ก่อนหน้า</Text>
+                    </TouchableOpacity>
+
+                    <Text style={styles.pageInfo}>หน้า {page}/{totalPages}</Text>
+
+                    <TouchableOpacity
+                        style={[styles.pageButton, page >= totalPages && styles.pageButtonDisabled]}
+                        onPress={() => goToPage(page + 1)}
+                        disabled={page >= totalPages}
+                    >
+                        <Text style={[styles.pageButtonText, page >= totalPages && styles.pageButtonTextDisabled]}>ถัดไป</Text>
+                        <ChevronRight size={18} color={page >= totalPages ? '#cbd5e1' : '#1e293b'} />
+                    </TouchableOpacity>
+                </View>
             )}
 
             {/* Cancel Confirmation Modal */}
@@ -535,26 +522,32 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#94a3b8',
     },
-
-    // Footer
-    cardFooter: {
-        marginTop: 12,
-        borderTopWidth: 1,
-        borderTopColor: '#f1f5f9',
-        paddingTop: 12,
-        alignItems: 'flex-end',
+    noteRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 8,
+        marginTop: 2,
     },
+    noteText: {
+        fontSize: 12,
+        color: '#64748b',
+        flex: 1,
+        fontStyle: 'italic',
+        lineHeight: 18,
+    },
+
+    // Cancel Button
     cancelButton: {
         backgroundColor: '#fff1f2',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 6,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
         borderWidth: 1,
         borderColor: '#fecdd3',
     },
     cancelButtonText: {
         color: '#be123c',
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: '600',
     },
 
@@ -654,5 +647,44 @@ const styles = StyleSheet.create({
     btnTextConfirm: {
         color: '#fff',
         fontWeight: '600',
+    },
+
+    // Pagination
+    paginationBar: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        backgroundColor: '#fff',
+        borderTopWidth: 1,
+        borderTopColor: '#f1f5f9',
+    },
+    pageButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 8,
+        backgroundColor: '#f1f5f9',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    pageButtonDisabled: {
+        opacity: 0.4,
+    },
+    pageButtonText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#1e293b',
+    },
+    pageButtonTextDisabled: {
+        color: '#cbd5e1',
+    },
+    pageInfo: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#64748b',
     },
 });

@@ -28,7 +28,13 @@ const useShelfUpdateStore = create((set, get) => ({
                 isLoading: false,
             });
         } catch (error) {
-            if (__DEV__) console.error('Check shelf update error:', error);
+            if (__DEV__) {
+                if (error?.response?.status === 401) {
+                    console.log('Check shelf update: Unauthorized (session expired)');
+                } else {
+                    console.error('Check shelf update error:', error);
+                }
+            }
             set({ isLoading: false });
         }
     },
@@ -48,16 +54,23 @@ const useShelfUpdateStore = create((set, get) => ({
                 hasShelfUpdate: unacknowledgedCount > 0,
             });
         } catch (error) {
-            if (__DEV__) console.error('Fetch change logs error:', error);
+            if (__DEV__) {
+                if (error?.response?.status === 401) {
+                    console.log('Fetch change logs: Unauthorized (session expired)');
+                } else {
+                    console.error('Fetch change logs error:', error);
+                }
+            }
         }
     },
 
-    // ดึง history ทั้งหมด (รวม acknowledged) สำหรับเปิด modal - รองรับ pagination
-    fetchAllHistory: async (branchCode, page = 1, limit = 20, isLoadMore = false) => {
+    // ดึง history (showAll = true คือดึงที่รับทราบแล้วด้วย) - รองรับ pagination
+    fetchAllHistory: async (branchCode, page = 1, limit = 20, isLoadMore = false, showAll = false) => {
         if (!branchCode) return { logs: [], total: 0 };
 
         try {
-            const res = await api.get(`/shelf-change-logs/${branchCode}?all=true&page=${page}&limit=${limit}`);
+            const allQuery = showAll ? 'all=true&' : '';
+            const res = await api.get(`/shelf-change-logs/${branchCode}?${allQuery}page=${page}&limit=${limit}`);
             const newLogs = res.data?.logs || [];
             const pagination = res.data?.pagination || { total: 0 };
 
@@ -77,7 +90,13 @@ const useShelfUpdateStore = create((set, get) => ({
 
             return { logs: newLogs, total: pagination.total };
         } catch (error) {
-            if (__DEV__) console.error('Fetch all history error:', error);
+            if (__DEV__) {
+                if (error?.response?.status === 401) {
+                    console.log('Fetch all history: Unauthorized (session expired)');
+                } else {
+                    console.error('Fetch all history error:', error);
+                }
+            }
             return { logs: [], total: 0 };
         }
     },
@@ -100,7 +119,13 @@ const useShelfUpdateStore = create((set, get) => ({
             });
             return true;
         } catch (error) {
-            if (__DEV__) console.error('Acknowledge one error:', error);
+            if (__DEV__) {
+                if (error?.response?.status === 401) {
+                    console.log('Acknowledge one: Unauthorized (session expired)');
+                } else {
+                    console.error('Acknowledge one error:', error);
+                }
+            }
             return false;
         }
     },
@@ -121,7 +146,13 @@ const useShelfUpdateStore = create((set, get) => ({
             });
             return true;
         } catch (error) {
-            if (__DEV__) console.error('Acknowledge all error:', error);
+            if (__DEV__) {
+                if (error?.response?.status === 401) {
+                    console.log('Acknowledge all: Unauthorized (session expired)');
+                } else {
+                    console.error('Acknowledge all error:', error);
+                }
+            }
             return false;
         }
     },

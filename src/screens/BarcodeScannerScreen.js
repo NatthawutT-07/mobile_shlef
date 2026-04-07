@@ -296,7 +296,9 @@ export default function BarcodeScannerScreen({ navigation, route }) {
                         <ChevronLeft color="#10b981" size={24} />
                         <Text style={styles.backButtonText}>กลับ</Text>
                     </TouchableOpacity>
-                    <Text style={styles.title}>สแกนบาร์โค้ด</Text>
+                    <View style={styles.headerInfo}>
+                        <Text style={styles.title}>สแกนบาร์โค้ด</Text>
+                    </View>
                     <View style={{ width: 40 }} />
                 </View>
                 <View style={styles.centerContent}>
@@ -588,7 +590,6 @@ const styles = StyleSheet.create({
     },
     headerInfo: {
         flex: 1,
-        alignItems: 'center',
     },
     title: {
         fontSize: 17,
@@ -721,7 +722,7 @@ const styles = StyleSheet.create({
     // Result Panel (Bottom Sheet style)
     resultPanel: {
         flex: 1,
-        backgroundColor: '#f8fafc',
+        backgroundColor: '#fff',
         padding: 24,
     },
     statusContent: {
